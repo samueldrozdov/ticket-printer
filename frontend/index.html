@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket Submission</title>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'San Francisco', sans-serif;
+            background: #ff6b35;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: #fdf6e3;
+            border-radius: 0;
+            box-shadow: 0 8px 24px rgba(255, 107, 53, 0.2);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            border: 2px solid #ff6b35;
+        }
+
+        h1 {
+            color: #000;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #000;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #000;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #ff6b35;
+            border-radius: 0;
+            font-size: 1em;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'San Francisco', sans-serif;
+            transition: border-color 0.3s;
+            background: #fdf6e3;
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #ff6b35;
+            box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 150px;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: #ff6b35;
+            color: white;
+            border: 2px solid #ff6b35;
+            border-radius: 0;
+            font-size: 1.2em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'San Francisco', sans-serif;
+        }
+
+        .submit-btn:hover {
+            background: #e55a2b;
+            box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
+        }
+
+        .submit-btn:active {
+            background: #cc4d1f;
+        }
+
+        .submit-btn:disabled {
+            background: #ccc;
+            border-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 0;
+            text-align: center;
+            font-weight: 500;
+            display: none;
+            border: 2px solid;
+        }
+
+        .message.success {
+            background: #fdf6e3;
+            color: #000;
+            border-color: #ff6b35;
+            display: block;
+        }
+
+        .message.error {
+            background: #fdf6e3;
+            color: #ff6b35;
+            border-color: #ff6b35;
+            display: block;
+        }
+
+        .message.info {
+            background: #fdf6e3;
+            color: #000;
+            border-color: #ff6b35;
+            display: block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 0;
+            border-top-color: #fff;
+            border-right-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ticket Submission</h1>
+        <p class="subtitle">Send your question or comment to be printed</p>
+        
+        <form id="ticketForm">
+            <div class="form-group">
+                <label for="from_name">Your Name/Username:</label>
+                <input type="text" id="from_name" name="from_name" placeholder="Enter your name" autocomplete="name" required maxlength="100">
+            </div>
+            
+            <div class="form-group">
+                <label for="question">Question/Comment:</label>
+                <textarea id="question" name="question" placeholder="Enter your question or comment here..." required maxlength="1000"></textarea>
+                <div style="text-align: right; margin-top: 4px; color: #000; font-size: 0.9em;">
+                    <span id="charCount">0</span>/1000
+                </div>
+            </div>
+            
+            <div class="form-group" style="margin-top: 20px;">
+                <!-- reCAPTCHA site key - Replace YOUR_RECAPTCHA_SITE_KEY with your actual key -->
+                <!-- Or configure via Netlify environment variable RECAPTCHA_SITE_KEY with a build step -->
+                <div class="g-recaptcha" id="recaptcha-container" data-sitekey="YOUR_RECAPTCHA_SITE_KEY"></div>
+            </div>
+            
+            <button type="submit" class="submit-btn" id="submitBtn">
+                Print Ticket
+            </button>
+        </form>
+        
+        <div class="message" id="message"></div>
+        <!-- Optional: Add your attribution here -->
+        <!-- <div style="margin-top: 24px; text-align: center; color: #000;">
+            <a href="YOUR_WEBSITE_URL" target="_blank" rel="noopener noreferrer" style="color: #000; text-decoration: underline;">By YOUR_NAME</a>
+        </div> -->
+    </div>
+
+    <script>
+        // Configure reCAPTCHA site key if available via environment variable
+        // (Requires build step to inject - otherwise replace YOUR_RECAPTCHA_SITE_KEY above)
+        if (window._env && window._env.RECAPTCHA_SITE_KEY) {
+            const recaptchaContainer = document.getElementById('recaptcha-container');
+            if (recaptchaContainer) {
+                recaptchaContainer.setAttribute('data-sitekey', window._env.RECAPTCHA_SITE_KEY);
+            }
+        }
+        
+        // API endpoint configuration
+        // This will be dynamically set based on environment
+        const API_URL = (() => {
+            const hostname = window.location.hostname;
+            
+            // Local development
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'http://localhost:5000';
+            }
+            
+            // Check for Netlify environment variable
+            if (window._env && window._env.REACT_APP_API_URL) {
+                return window._env.REACT_APP_API_URL;
+            }
+            
+            // In production, set this to your ngrok, Cloudflare tunnel, or exposed Raspberry Pi URL
+            // Example: 'https://abc123.ngrok.io' or 'https://your-tunnel.trycloudflare.com'
+            // Replace 'YOUR_API_URL_HERE' below with your actual API URL
+            // OR set via Netlify environment variable REACT_APP_API_URL (requires build step)
+            const productionApiUrl = 'YOUR_API_URL_HERE';
+            
+            return productionApiUrl || '/api';
+        })();
+
+        const form = document.getElementById('ticketForm');
+        const messageDiv = document.getElementById('message');
+        const submitBtn = document.getElementById('submitBtn');
+        const questionField = document.getElementById('question');
+        const charCount = document.getElementById('charCount');
+        
+        // Update character count in real-time
+        questionField.addEventListener('input', () => {
+            charCount.textContent = questionField.value.length;
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const fromName = document.getElementById('from_name').value.trim();
+            const question = document.getElementById('question').value.trim();
+            
+            if (!fromName) {
+                showMessage('Please enter your name.', 'error');
+                return;
+            }
+            
+            if (fromName.length > 100) {
+                showMessage('Name must be 100 characters or less.', 'error');
+                return;
+            }
+            
+            if (!question) {
+                showMessage('Please enter a question or comment.', 'error');
+                return;
+            }
+            
+            if (question.length > 1000) {
+                showMessage('Message must be 1000 characters or less.', 'error');
+                return;
+            }
+            
+            // Check reCAPTCHA
+            const recaptchaResponse = grecaptcha.getResponse();
+            if (!recaptchaResponse) {
+                showMessage('Please complete the CAPTCHA verification.', 'error');
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading"></span>Printing...';
+            
+            // Log to database in parallel (don't wait for it)
+            fetch('/.netlify/functions/log-ticket', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    from_name: fromName,
+                    question: question
+                })
+            }).catch(err => console.error('Database log error:', err));
+            
+            try {
+                const response = await fetch(`${API_URL}/submit_ticket`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        from_name: fromName,
+                        question: question
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(data.message || 'Ticket printed successfully! ✓', 'success');
+                    form.reset();
+                    grecaptcha.reset();
+                } else {
+                    showMessage('Printer is either off or out of paper. Please contact the administrator to fix it!', 'error');
+                }
+            } catch (error) {
+                showMessage('Printer is either off or out of paper. Please contact the administrator to fix it!', 'error');
+                console.error('API Error:', error);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Print Ticket';
+            }
+        });
+        
+        function showMessage(text, type) {
+            messageDiv.innerHTML = text;
+            messageDiv.className = 'message ' + type;
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html>
+

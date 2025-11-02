@@ -1,0 +1,4 @@
+Flask==3.0.0
+python-escpos==3.0a8
+Werkzeug==3.0.1
+pyusb==1.2.1

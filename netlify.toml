@@ -1,0 +1,13 @@
+[build]
+  publish = "frontend"
+  command = "echo 'No build required'"
+
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+
