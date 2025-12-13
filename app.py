@@ -37,18 +37,36 @@ def build_ticket_text(from_name: str, question: str) -> str:
     time_str = now.strftime("%I:%M %p")
     date_str = now.strftime("%B %d, %Y")
 
+    # lines = [
+    #     "================================",
+    #     "TICKET",
+    #     "--------------------------------",
+    #     f"From: {from_name}",
+    #     f"Time: {time_str}",
+    #     f"Date: {date_str}",
+    #     "--------------------------------",
+    #     "Question/Comment",
+    #     question.strip(),
+    #     "--------------------------------",
+    #     "================================",
+    # ]
     lines = [
-        "================================",
-        "TICKET",
-        "--------------------------------",
-        f"From: {from_name}",
-        f"Time: {time_str}",
-        f"Date: {date_str}",
-        "--------------------------------",
-        "Question/Comment",
+        "    .  *  .   *   .  *  .",
+        "  *    ✦ PROPHECY ✦    *",
+        "    .  *  .   *   .  *  .",
+        "",
+        f"  The Oracle speaks for:",
+        f"  ☽ {from_name}",
+        f"  ☆ {time_str} on {date_str}",
+        "",
+        "  ═══════════════════════════",
+        "  The spirits whisper:",
+        "",
         question.strip(),
-        "--------------------------------",
-        "================================",
+        "",
+        "  ═══════════════════════════",
+        "    ∴ May wisdom guide you ∴",
+        "    .  *  .   *   .  *  .",
     ]
     return "\n".join(lines) + "\n"
 
