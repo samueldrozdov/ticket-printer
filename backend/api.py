@@ -7,7 +7,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import logging
+import base64
+import io
 from escpos.printer import Usb, Serial, Network
+from PIL import Image
 import os
 
 # Configure logging
@@ -45,7 +48,42 @@ def get_printer():
         logger.error(f"Failed to initialize printer: {e}")
         return None
 
-def format_ticket(printer, from_name, question):
+def process_image_for_printing(image_base64, max_width=384):
+    """Process base64 image for thermal printer"""
+    try:
+        # Remove data URL prefix if present (e.g., "data:image/png;base64,")
+        if ',' in image_base64:
+            image_base64 = image_base64.split(',')[1]
+        
+        # Decode base64 to bytes
+        image_data = base64.b64decode(image_base64)
+        image = Image.open(io.BytesIO(image_data))
+        
+        # Convert to RGB if necessary (handles RGBA, P mode, etc.)
+        if image.mode in ('RGBA', 'P'):
+            # Create white background for transparency
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            if image.mode == 'RGBA':
+                background.paste(image, mask=image.split()[3])
+            else:
+                background.paste(image)
+            image = background
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # Resize to fit printer width while maintaining aspect ratio
+        if image.width > max_width:
+            ratio = max_width / image.width
+            new_height = int(image.height * ratio)
+            image = image.resize((max_width, new_height), Image.Resampling.LANCZOS)
+        
+        return image
+    except Exception as e:
+        logger.error(f"Error processing image: {e}")
+        return None
+
+
+def format_ticket(printer, from_name, question, image=None):
     """Format and print the ticket"""
     try:
         now = datetime.now()
@@ -75,6 +113,12 @@ def format_ticket(printer, from_name, question):
         printer.set(align='left', font='a', width=1, height=1, bold=False)
         printer.text(f"{question}\n")
         
+        # Print image if provided
+        if image is not None:
+            printer.text("--------------------------------\n")
+            printer.set(align='center')
+            printer.image(image)
+        
         printer.text("--------------------------------\n")
         
         printer.set(align='center', font='a', width=2, height=2, bold=True)
@@ -95,6 +139,7 @@ def submit_ticket():
         data = request.json
         from_name = data.get('from_name', 'Anonymous')
         question = data.get('question', '')
+        image_base64 = data.get('image')  # Optional base64 image
         
         if not question.strip():
             return jsonify({'success': False, 'error': 'Question/Comment cannot be empty'}), 400
@@ -104,10 +149,18 @@ def submit_ticket():
         if printer is None:
             return jsonify({'success': False, 'error': 'Printer not available'}), 500
         
-        success = format_ticket(printer, from_name, question)
+        # Process image if provided
+        processed_image = None
+        if image_base64:
+            processed_image = process_image_for_printing(image_base64)
+            if processed_image is None:
+                logger.warning("Failed to process image, printing without it")
+        
+        success = format_ticket(printer, from_name, question, processed_image)
         
         if success:
-            logger.info(f"Ticket printed successfully from: {from_name}")
+            has_image = processed_image is not None
+            logger.info(f"Ticket printed successfully from: {from_name} (with image: {has_image})")
             return jsonify({'success': True, 'message': 'Ticket printed successfully'})
         else:
             return jsonify({'success': False, 'error': 'Failed to print ticket'}), 500

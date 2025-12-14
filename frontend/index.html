@@ -77,6 +77,73 @@
             min-height: 150px;
         }
 
+        .image-upload-container {
+            border: 2px dashed #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s, background-color 0.3s;
+        }
+
+        .image-upload-container:hover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .image-upload-container.has-image {
+            border-style: solid;
+            border-color: #667eea;
+        }
+
+        .image-upload-container input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .upload-hint {
+            color: #999;
+            font-size: 0.8em;
+            margin-top: 5px;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .image-preview.visible {
+            display: block;
+        }
+
+        .remove-image-btn {
+            background: #ff4757;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-top: 10px;
+            transition: background-color 0.2s;
+        }
+
+        .remove-image-btn:hover {
+            background: #ff3344;
+        }
+
         .submit-btn {
             width: 100%;
             padding: 15px;
@@ -170,6 +237,18 @@
                     <span id="charCount">0</span>/1000
                 </div>
             </div>
+
+            <div class="form-group">
+                <label>Image (optional):</label>
+                <div class="image-upload-container" id="imageUploadContainer">
+                    <input type="file" id="imageInput" name="image" accept="image/*">
+                    <div class="upload-icon">📷</div>
+                    <div class="upload-text">Click or drag to upload an image</div>
+                    <div class="upload-hint">PNG, JPG, GIF up to 5MB</div>
+                    <img id="imagePreview" class="image-preview" alt="Preview">
+                    <button type="button" class="remove-image-btn" id="removeImageBtn" style="display: none;">Remove Image</button>
+                </div>
+            </div>
             
             <!-- reCAPTCHA disabled for now
             <div class="form-group" style="margin-top: 20px;">
@@ -219,11 +298,99 @@
         const submitBtn = document.getElementById('submitBtn');
         const questionField = document.getElementById('question');
         const charCount = document.getElementById('charCount');
+        const imageInput = document.getElementById('imageInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const imageUploadContainer = document.getElementById('imageUploadContainer');
+        const removeImageBtn = document.getElementById('removeImageBtn');
+        
+        let selectedImageBase64 = null;
         
         // Update character count in real-time
         questionField.addEventListener('input', () => {
             charCount.textContent = questionField.value.length;
         });
+
+        // Image upload handling
+        imageUploadContainer.addEventListener('click', (e) => {
+            if (e.target !== removeImageBtn) {
+                imageInput.click();
+            }
+        });
+
+        // Drag and drop support
+        imageUploadContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            imageUploadContainer.style.borderColor = '#667eea';
+            imageUploadContainer.style.backgroundColor = '#f8f9ff';
+        });
+
+        imageUploadContainer.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            if (!selectedImageBase64) {
+                imageUploadContainer.style.borderColor = '#e0e0e0';
+                imageUploadContainer.style.backgroundColor = '';
+            }
+        });
+
+        imageUploadContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleImageFile(files[0]);
+            }
+        });
+
+        imageInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleImageFile(e.target.files[0]);
+            }
+        });
+
+        removeImageBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearImage();
+        });
+
+        function handleImageFile(file) {
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                showMessage('Please select a valid image file.', 'error');
+                return;
+            }
+
+            // Validate file size (5MB max)
+            if (file.size > 5 * 1024 * 1024) {
+                showMessage('Image must be less than 5MB.', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                selectedImageBase64 = e.target.result;
+                imagePreview.src = selectedImageBase64;
+                imagePreview.classList.add('visible');
+                imageUploadContainer.classList.add('has-image');
+                imageUploadContainer.querySelector('.upload-icon').style.display = 'none';
+                imageUploadContainer.querySelector('.upload-text').style.display = 'none';
+                imageUploadContainer.querySelector('.upload-hint').style.display = 'none';
+                removeImageBtn.style.display = 'inline-block';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearImage() {
+            selectedImageBase64 = null;
+            imageInput.value = '';
+            imagePreview.src = '';
+            imagePreview.classList.remove('visible');
+            imageUploadContainer.classList.remove('has-image');
+            imageUploadContainer.querySelector('.upload-icon').style.display = '';
+            imageUploadContainer.querySelector('.upload-text').style.display = '';
+            imageUploadContainer.querySelector('.upload-hint').style.display = '';
+            removeImageBtn.style.display = 'none';
+            imageUploadContainer.style.borderColor = '#e0e0e0';
+            imageUploadContainer.style.backgroundColor = '';
+        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -254,6 +421,17 @@
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="loading"></span>Printing...';
             
+            // Build request payload
+            const payload = {
+                from_name: fromName,
+                question: question
+            };
+            
+            // Include image if one was selected
+            if (selectedImageBase64) {
+                payload.image = selectedImageBase64;
+            }
+
             // Log to database in parallel (only in production, skip on localhost)
             if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
                 fetch('/.netlify/functions/log-ticket', {
@@ -263,7 +441,8 @@
                     },
                     body: JSON.stringify({
                         from_name: fromName,
-                        question: question
+                        question: question,
+                        has_image: !!selectedImageBase64
                     })
                 }).catch(err => console.error('Database log error:', err));
             }
@@ -274,10 +453,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        from_name: fromName,
-                        question: question
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
                 const data = await response.json();
@@ -285,6 +461,8 @@
                 if (data.success) {
                     showMessage(data.message || 'Ticket printed successfully! ✓', 'success');
                     form.reset();
+                    charCount.textContent = '0';
+                    clearImage();
                 } else {
                     showMessage('Printer is either off or out of paper. Please contact the administrator to fix it!', 'error');
                 }

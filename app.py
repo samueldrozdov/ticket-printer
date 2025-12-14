@@ -7,9 +7,12 @@ from flask import Flask, request, render_template, jsonify
 from datetime import datetime
 import logging
 import os
+import base64
+import io
 
 from escpos.printer import Usb, Serial, Network
-from ble_printer import ble_print_text, ble_is_available
+from PIL import Image
+from ble_printer import ble_print_text, ble_print_text_with_image, ble_is_available, process_image_base64
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -105,7 +108,7 @@ def get_printer():
         return None
 
 
-def format_ticket_escpos(printer, from_name: str, question: str) -> bool:
+def format_ticket_escpos(printer, from_name: str, question: str, image: Image.Image = None) -> bool:
     """
     Original rich formatting (uses python-escpos methods).
     Works for usb/serial/network/bluetooth(classic).
@@ -137,6 +140,12 @@ def format_ticket_escpos(printer, from_name: str, question: str) -> bool:
         printer.set(align="left", font="a", width=1, height=1, bold=False)
         printer.text(f"{question}\n")
 
+        # Print image if provided
+        if image is not None:
+            printer.text("--------------------------------\n")
+            printer.set(align="center")
+            printer.image(image)
+
         printer.text("--------------------------------\n")
 
         printer.set(align="center", font="a", width=2, height=2, bold=True)
@@ -162,9 +171,17 @@ def submit_ticket():
         data = request.json or {}
         from_name = data.get("from_name", "Anonymous")
         question = data.get("question", "")
+        image_base64 = data.get("image")  # Optional base64 image
 
         if not question.strip():
             return jsonify({"success": False, "error": "Question/Comment cannot be empty"}), 400
+
+        # Process image if provided
+        processed_image = None
+        if image_base64:
+            processed_image = process_image_base64(image_base64)
+            if processed_image is None:
+                logger.warning("Failed to process image, printing without it")
 
         # ✅ BLE path (your printer)
         if PRINTER_TYPE == "ble":
@@ -172,9 +189,14 @@ def submit_ticket():
                 return jsonify({"success": False, "error": "BLE_PRINTER_ADDR is not set"}), 500
 
             text = build_ticket_text(from_name, question)
-            ble_print_text(BLE_PRINTER_ADDR, text)
+            
+            if processed_image is not None:
+                ble_print_text_with_image(BLE_PRINTER_ADDR, text, processed_image)
+            else:
+                ble_print_text(BLE_PRINTER_ADDR, text)
 
-            logger.info(f"Ticket printed successfully over BLE from: {from_name}")
+            has_image = processed_image is not None
+            logger.info(f"Ticket printed successfully over BLE from: {from_name} (with image: {has_image})")
             return jsonify({"success": True, "message": "Ticket printed successfully (BLE)"}), 200
 
         # Everything else uses escpos printers
@@ -182,9 +204,10 @@ def submit_ticket():
         if printer is None:
             return jsonify({"success": False, "error": "Printer not available"}), 500
 
-        ok = format_ticket_escpos(printer, from_name, question)
+        ok = format_ticket_escpos(printer, from_name, question, processed_image)
         if ok:
-            logger.info(f"Ticket printed successfully from: {from_name}")
+            has_image = processed_image is not None
+            logger.info(f"Ticket printed successfully from: {from_name} (with image: {has_image})")
             return jsonify({"success": True, "message": "Ticket printed successfully"}), 200
 
         return jsonify({"success": False, "error": "Failed to print ticket"}), 500

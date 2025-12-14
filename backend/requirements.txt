@@ -3,5 +3,6 @@ python-escpos==3.0a8
 Werkzeug==3.0.1
 pyusb==1.2.1
 flask-cors==4.0.0
+Pillow>=10.0.0
 
 
