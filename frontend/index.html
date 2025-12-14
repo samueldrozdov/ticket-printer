@@ -254,17 +254,19 @@
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="loading"></span>Printing...';
             
-            // Log to database in parallel (don't wait for it)
-            fetch('/.netlify/functions/log-ticket', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    from_name: fromName,
-                    question: question
-                })
-            }).catch(err => console.error('Database log error:', err));
+            // Log to database in parallel (only in production, skip on localhost)
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                fetch('/.netlify/functions/log-ticket', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        from_name: fromName,
+                        question: question
+                    })
+                }).catch(err => console.error('Database log error:', err));
+            }
             
             try {
                 const response = await fetch(`${API_URL}/submit_ticket`, {
