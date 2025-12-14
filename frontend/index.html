@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ticket Submission</title>
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <!-- <script src="https://www.google.com/recaptcha/api.js" async defer></script> -->
     <style>
         * {
             margin: 0;
@@ -13,8 +13,8 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'San Francisco', sans-serif;
-            background: #ff6b35;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
             justify-content: center;
@@ -23,17 +23,16 @@
         }
 
         .container {
-            background: #fdf6e3;
-            border-radius: 0;
-            box-shadow: 0 8px 24px rgba(255, 107, 53, 0.2);
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             max-width: 600px;
             width: 100%;
             padding: 40px;
-            border: 2px solid #ff6b35;
         }
 
         h1 {
-            color: #000;
+            color: #333;
             text-align: center;
             margin-bottom: 10px;
             font-size: 2.5em;
@@ -41,7 +40,7 @@
 
         .subtitle {
             text-align: center;
-            color: #000;
+            color: #666;
             margin-bottom: 30px;
             font-size: 1.1em;
         }
@@ -53,7 +52,7 @@
         label {
             display: block;
             margin-bottom: 8px;
-            color: #000;
+            color: #333;
             font-weight: 600;
             font-size: 1.1em;
         }
@@ -61,18 +60,16 @@
         input[type="text"], textarea {
             width: 100%;
             padding: 15px;
-            border: 2px solid #ff6b35;
-            border-radius: 0;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
             font-size: 1em;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'San Francisco', sans-serif;
+            font-family: inherit;
             transition: border-color 0.3s;
-            background: #fdf6e3;
         }
 
         input[type="text"]:focus, textarea:focus {
             outline: none;
-            border-color: #ff6b35;
-            box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+            border-color: #667eea;
         }
 
         textarea {
@@ -83,60 +80,58 @@
         .submit-btn {
             width: 100%;
             padding: 15px;
-            background: #ff6b35;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border: 2px solid #ff6b35;
-            border-radius: 0;
+            border: none;
+            border-radius: 10px;
             font-size: 1.2em;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s, box-shadow 0.2s;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'San Francisco', sans-serif;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .submit-btn:hover {
-            background: #e55a2b;
-            box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
         }
 
         .submit-btn:active {
-            background: #cc4d1f;
+            transform: translateY(0);
         }
 
         .submit-btn:disabled {
             background: #ccc;
-            border-color: #ccc;
             cursor: not-allowed;
+            transform: none;
         }
 
         .message {
             margin-top: 20px;
             padding: 15px;
-            border-radius: 0;
+            border-radius: 10px;
             text-align: center;
             font-weight: 500;
             display: none;
-            border: 2px solid;
         }
 
         .message.success {
-            background: #fdf6e3;
-            color: #000;
-            border-color: #ff6b35;
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
             display: block;
         }
 
         .message.error {
-            background: #fdf6e3;
-            color: #ff6b35;
-            border-color: #ff6b35;
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
             display: block;
         }
 
         .message.info {
-            background: #fdf6e3;
-            color: #000;
-            border-color: #ff6b35;
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
             display: block;
         }
 
@@ -150,9 +145,8 @@
             width: 20px;
             height: 20px;
             border: 3px solid rgba(255,255,255,.3);
-            border-radius: 0;
+            border-radius: 50%;
             border-top-color: #fff;
-            border-right-color: #fff;
             animation: spin 1s ease-in-out infinite;
             margin-right: 10px;
         }
@@ -160,7 +154,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Ticket Submission</h1>
+        <h1>📝 Submit a Ticket</h1>
         <p class="subtitle">Send your question or comment to be printed</p>
         
         <form id="ticketForm">
@@ -172,16 +166,16 @@
             <div class="form-group">
                 <label for="question">Note:</label>
                 <textarea id="question" name="question" placeholder="Enter your question or comment here..." required maxlength="1000"></textarea>
-                <div style="text-align: right; margin-top: 4px; color: #000; font-size: 0.9em;">
+                <div style="text-align: right; margin-top: 4px; color: #666; font-size: 0.9em;">
                     <span id="charCount">0</span>/1000
                 </div>
             </div>
             
+            <!-- reCAPTCHA disabled for now
             <div class="form-group" style="margin-top: 20px;">
-                <!-- reCAPTCHA site key - Replace YOUR_RECAPTCHA_SITE_KEY with your actual key -->
-                <!-- Or configure via Netlify environment variable RECAPTCHA_SITE_KEY with a build step -->
                 <div class="g-recaptcha" id="recaptcha-container" data-sitekey="YOUR_RECAPTCHA_SITE_KEY"></div>
             </div>
+            -->
             
             <button type="submit" class="submit-btn" id="submitBtn">
                 Print Ticket
@@ -196,15 +190,6 @@
     </div>
 
     <script>
-        // Configure reCAPTCHA site key if available via environment variable
-        // (Requires build step to inject - otherwise replace YOUR_RECAPTCHA_SITE_KEY above)
-        if (window._env && window._env.RECAPTCHA_SITE_KEY) {
-            const recaptchaContainer = document.getElementById('recaptcha-container');
-            if (recaptchaContainer) {
-                recaptchaContainer.setAttribute('data-sitekey', window._env.RECAPTCHA_SITE_KEY);
-            }
-        }
-        
         // API endpoint configuration
         // This will be dynamically set based on environment
         const API_URL = (() => {
@@ -266,13 +251,6 @@
                 return;
             }
             
-            // Check reCAPTCHA
-            const recaptchaResponse = grecaptcha.getResponse();
-            if (!recaptchaResponse) {
-                showMessage('Please complete the CAPTCHA verification.', 'error');
-                return;
-            }
-            
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="loading"></span>Printing...';
             
@@ -305,7 +283,6 @@
                 if (data.success) {
                     showMessage(data.message || 'Ticket printed successfully! ✓', 'success');
                     form.reset();
-                    grecaptcha.reset();
                 } else {
                     showMessage('Printer is either off or out of paper. Please contact the administrator to fix it!', 'error');
                 }
