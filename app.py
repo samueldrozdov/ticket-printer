@@ -18,7 +18,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='frontend')
 
 # Configuration
 PRINTER_TYPE = os.getenv("PRINTER_TYPE", "usb")  # usb, serial, network, bluetooth, ble
