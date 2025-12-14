@@ -276,7 +276,7 @@
             
             // Local development
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                return 'http://localhost:5000';
+                return 'http://localhost:5001';
             }
             
             // Check for Netlify environment variable
@@ -464,11 +464,19 @@
                     charCount.textContent = '0';
                     clearImage();
                 } else {
-                    showMessage('Printer is either off or out of paper. Please contact the administrator to fix it!', 'error');
+                    const errorMsg = data.error || 'Unknown error from server';
+                    showMessage(`Error: ${errorMsg}`, 'error');
+                    console.error('API Error:', data);
                 }
             } catch (error) {
-                showMessage('Printer is either off or out of paper. Please contact the administrator to fix it!', 'error');
-                console.error('API Error:', error);
+                let errorMsg = 'Could not connect to the print server. ';
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMsg += `Make sure the backend is running at ${API_URL}`;
+                } else {
+                    errorMsg += error.message;
+                }
+                showMessage(errorMsg, 'error');
+                console.error('Network/API Error:', error);
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = 'Print Ticket';

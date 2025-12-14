@@ -4,7 +4,7 @@
 
 const API_CONFIG = {
     // For local development
-    LOCAL_API_URL: 'http://localhost:5000',
+    LOCAL_API_URL: 'http://localhost:5001',
     
     // For production (replace with your Raspberry Pi URL)
     // Options:
