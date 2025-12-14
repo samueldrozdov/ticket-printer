@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__, template_folder='frontend')
 
 # Configuration
+TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"  # Set to 'true' to test without a printer
 PRINTER_TYPE = os.getenv("PRINTER_TYPE", "usb")  # usb, serial, network, bluetooth, ble
 
 USB_VENDOR = int(os.getenv("USB_VENDOR", "0x0416"), 16) if os.getenv("USB_VENDOR") else None
@@ -175,6 +176,20 @@ def submit_ticket():
 
         if not question.strip():
             return jsonify({"success": False, "error": "Question/Comment cannot be empty"}), 400
+
+        # Test mode - log to console instead of printing
+        if TEST_MODE:
+            now = datetime.now()
+            logger.info("=" * 40)
+            logger.info("TEST MODE - Ticket would be printed:")
+            logger.info("=" * 40)
+            logger.info(f"From: {from_name}")
+            logger.info(f"Time: {now.strftime('%I:%M %p')}")
+            logger.info(f"Date: {now.strftime('%B %d, %Y')}")
+            logger.info(f"Question/Comment: {question}")
+            logger.info(f"Has Image: {image_base64 is not None}")
+            logger.info("=" * 40)
+            return jsonify({"success": True, "message": "Ticket logged (TEST MODE - no printer)"}), 200
 
         # Process image if provided
         processed_image = None
