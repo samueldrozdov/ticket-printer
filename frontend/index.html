@@ -610,6 +610,35 @@
         }
 
         // Vocab functionality
+        
+        // Convert IPA phonetics to ASCII-friendly representation for thermal printers
+        function ipaToAscii(ipa) {
+            if (!ipa) return '';
+            const conversions = {
+                'ˈ': "'", 'ˌ': ',', 'ː': ':', 'ʰ': 'h',
+                'ə': 'uh', 'ɜ': 'er', 'ɐ': 'a', 'ʌ': 'u',
+                'æ': 'a', 'ɑ': 'ah', 'ɒ': 'o', 'ɔ': 'aw',
+                'ɛ': 'e', 'ɪ': 'i', 'ʊ': 'oo', 'ʉ': 'oo',
+                'i': 'ee', 'u': 'oo', 'e': 'ay', 'o': 'oh',
+                'ɹ': 'r', 'ɾ': 'r', 'ɽ': 'r', 'ʁ': 'r',
+                'ŋ': 'ng', 'ɲ': 'ny', 'ɳ': 'n',
+                'θ': 'th', 'ð': 'th', 'ʃ': 'sh', 'ʒ': 'zh',
+                'tʃ': 'ch', 'dʒ': 'j', 'ʔ': "'",
+                'j': 'y', 'ɫ': 'l', 'ɬ': 'l',
+                'β': 'b', 'ɸ': 'f', 'χ': 'kh', 'ɣ': 'g',
+                'ʍ': 'wh', 'ʋ': 'v', 'ɥ': 'y'
+            };
+            
+            let result = ipa;
+            // Handle multi-character sequences first
+            result = result.replace(/tʃ/g, 'ch').replace(/dʒ/g, 'j');
+            // Then single characters
+            for (const [from, to] of Object.entries(conversions)) {
+                result = result.split(from).join(to);
+            }
+            return result;
+        }
+
         const vocabWords = [
             'ephemeral', 'serendipity', 'eloquent', 'ubiquitous', 'pragmatic',
             'resilient', 'meticulous', 'candid', 'diligent', 'empathy',
@@ -688,10 +717,10 @@
             vocabSubmitBtn.disabled = true;
             vocabSubmitBtn.innerHTML = '<span class="loading"></span>Printing...';
 
-            // Format vocab for printing
+            // Format vocab for printing (convert phonetic to ASCII for thermal printer)
             let vocabText = `${currentVocabData.word.toUpperCase()}`;
             if (currentVocabData.phonetic) {
-                vocabText += `\n${currentVocabData.phonetic}`;
+                vocabText += `\n${ipaToAscii(currentVocabData.phonetic)}`;
             }
             vocabText += `\n\n[${currentVocabData.partOfSpeech}]`;
             vocabText += `\n\n${currentVocabData.definition}`;
