@@ -236,6 +236,79 @@
             animation: spin 1s ease-in-out infinite;
             margin-right: 10px;
         }
+
+        /* Vocab Tab Styles */
+        .vocab-card {
+            background: #f8f9ff;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 24px;
+            margin-bottom: 20px;
+            min-height: 180px;
+        }
+
+        .vocab-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            padding: 40px 0;
+        }
+
+        .vocab-loading .loading {
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-top-color: #667eea;
+        }
+
+        .vocab-word {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .vocab-phonetic {
+            font-size: 1em;
+            color: #888;
+            font-style: italic;
+            margin-bottom: 12px;
+        }
+
+        .vocab-pos {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 500;
+            margin-bottom: 12px;
+        }
+
+        .vocab-definition {
+            font-size: 1em;
+            color: #444;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+
+        .vocab-example {
+            font-size: 0.95em;
+            color: #666;
+            font-style: italic;
+            padding-left: 12px;
+            border-left: 3px solid #667eea;
+        }
+
+        .vocab-example:empty {
+            display: none;
+        }
+
+        .vocab-error {
+            color: #721c24;
+            text-align: center;
+            padding: 40px 0;
+        }
     </style>
 </head>
 <body>
@@ -244,12 +317,13 @@
         
         <!-- Tab Navigation -->
         <div class="tab-nav">
-            <button class="tab-btn active" data-tab="basic">Basic</button>
+            <button class="tab-btn active" data-tab="text">Text</button>
             <button class="tab-btn" data-tab="image">Image</button>
+            <button class="tab-btn" data-tab="vocab">Vocab</button>
         </div>
 
-        <!-- Basic Tab -->
-        <div id="tab-basic" class="tab-content active">
+        <!-- Text Tab -->
+        <div id="tab-text" class="tab-content active">
             <form id="basicForm">
                 <div class="form-group">
                     <textarea id="basicText" name="text" placeholder="Enter text to print..." required maxlength="1000"></textarea>
@@ -273,6 +347,26 @@
                 </div>
                 <button type="submit" class="submit-btn" id="imageSubmitBtn">Print</button>
             </form>
+        </div>
+
+        <!-- Vocab Tab -->
+        <div id="tab-vocab" class="tab-content">
+            <div class="vocab-card">
+                <div class="vocab-loading" id="vocabLoading">
+                    <span class="loading"></span> Loading word of the day...
+                </div>
+                <div class="vocab-content" id="vocabContent" style="display: none;">
+                    <div class="vocab-word" id="vocabWord"></div>
+                    <div class="vocab-phonetic" id="vocabPhonetic"></div>
+                    <div class="vocab-pos" id="vocabPos"></div>
+                    <div class="vocab-definition" id="vocabDefinition"></div>
+                    <div class="vocab-example" id="vocabExample"></div>
+                </div>
+                <div class="vocab-error" id="vocabError" style="display: none;">
+                    Could not load vocabulary word. Please try again later.
+                </div>
+            </div>
+            <button type="button" class="submit-btn" id="vocabSubmitBtn">Print</button>
         </div>
         
         <div class="message" id="message"></div>
@@ -514,6 +608,132 @@
             messageDiv.className = 'message';
             messageDiv.style.display = 'none';
         }
+
+        // Vocab functionality
+        const vocabWords = [
+            'ephemeral', 'serendipity', 'eloquent', 'ubiquitous', 'pragmatic',
+            'resilient', 'meticulous', 'candid', 'diligent', 'empathy',
+            'ambiguous', 'benevolent', 'capricious', 'deferential', 'ebullient',
+            'fastidious', 'gregarious', 'hackneyed', 'iconoclast', 'juxtapose',
+            'kinetic', 'lucid', 'malleable', 'nonchalant', 'obstinate',
+            'penchant', 'quintessential', 'reticent', 'sanguine', 'tenacious',
+            'verbose', 'whimsical', 'zealous', 'aesthetic', 'brevity',
+            'cogent', 'disparate', 'exacerbate', 'fortuitous', 'gratuitous',
+            'hyperbole', 'innate', 'jovial', 'keen', 'lethargic',
+            'mundane', 'nuance', 'ostentatious', 'paradox', 'querulous'
+        ];
+
+        let currentVocabData = null;
+
+        function getDailyWord() {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), 0, 0);
+            const diff = now - start;
+            const oneDay = 1000 * 60 * 60 * 24;
+            const dayOfYear = Math.floor(diff / oneDay);
+            return vocabWords[dayOfYear % vocabWords.length];
+        }
+
+        async function loadVocabWord() {
+            const vocabLoading = document.getElementById('vocabLoading');
+            const vocabContent = document.getElementById('vocabContent');
+            const vocabError = document.getElementById('vocabError');
+            
+            vocabLoading.style.display = 'flex';
+            vocabContent.style.display = 'none';
+            vocabError.style.display = 'none';
+
+            const word = getDailyWord();
+
+            try {
+                const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+                if (!response.ok) throw new Error('Word not found');
+                
+                const data = await response.json();
+                const entry = data[0];
+                const meaning = entry.meanings[0];
+                const definition = meaning.definitions[0];
+
+                currentVocabData = {
+                    word: entry.word,
+                    phonetic: entry.phonetic || (entry.phonetics && entry.phonetics[0]?.text) || '',
+                    partOfSpeech: meaning.partOfSpeech,
+                    definition: definition.definition,
+                    example: definition.example || ''
+                };
+
+                document.getElementById('vocabWord').textContent = currentVocabData.word;
+                document.getElementById('vocabPhonetic').textContent = currentVocabData.phonetic;
+                document.getElementById('vocabPos').textContent = currentVocabData.partOfSpeech;
+                document.getElementById('vocabDefinition').textContent = currentVocabData.definition;
+                document.getElementById('vocabExample').textContent = currentVocabData.example ? `"${currentVocabData.example}"` : '';
+
+                vocabLoading.style.display = 'none';
+                vocabContent.style.display = 'block';
+            } catch (error) {
+                console.error('Failed to load vocab:', error);
+                vocabLoading.style.display = 'none';
+                vocabError.style.display = 'block';
+            }
+        }
+
+        // Vocab form submission
+        const vocabSubmitBtn = document.getElementById('vocabSubmitBtn');
+        vocabSubmitBtn.addEventListener('click', async () => {
+            if (!currentVocabData) {
+                showMessage('Vocabulary word not loaded yet.', 'error');
+                return;
+            }
+
+            vocabSubmitBtn.disabled = true;
+            vocabSubmitBtn.innerHTML = '<span class="loading"></span>Printing...';
+
+            // Format vocab for printing
+            let vocabText = `${currentVocabData.word.toUpperCase()}`;
+            if (currentVocabData.phonetic) {
+                vocabText += `\n${currentVocabData.phonetic}`;
+            }
+            vocabText += `\n\n[${currentVocabData.partOfSpeech}]`;
+            vocabText += `\n\n${currentVocabData.definition}`;
+            if (currentVocabData.example) {
+                vocabText += `\n\nExample: "${currentVocabData.example}"`;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/print`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        type: 'text',
+                        content: vocabText
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message || 'Printed successfully! ✓', 'success');
+                } else {
+                    showMessage(`Error: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Could not connect to printer. ${error.message}`, 'error');
+            } finally {
+                vocabSubmitBtn.disabled = false;
+                vocabSubmitBtn.innerHTML = 'Print';
+            }
+        });
+
+        // Load vocab when switching to vocab tab
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.tab === 'vocab' && !currentVocabData) {
+                    loadVocabWord();
+                }
+            });
+        });
     </script>
 </body>
 </html>
