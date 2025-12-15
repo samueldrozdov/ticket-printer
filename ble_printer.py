@@ -162,6 +162,7 @@ async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_ga
     
     last_error = None
     for attempt in range(retries + 1):
+        started_writing = False
         try:
             device = await _find_device_by_address(addr)
             if device is None:
@@ -175,11 +176,15 @@ async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_ga
                 # or response=False with delays for compatibility
                 for part in _chunk(payload, chunk_size):
                     await client.write_gatt_char(BLE_WRITE_UUID, part, response=use_response)
+                    started_writing = True  # Mark that we've sent data
                     if not use_response and write_gap:
                         await asyncio.sleep(write_gap)
                 return  # Success
         except Exception as e:
             last_error = e
+            # Don't retry if we already started writing - it would cause duplicate prints
+            if started_writing:
+                raise
             if attempt < retries:
                 await asyncio.sleep(2)  # Wait before retry
             continue
