@@ -4,6 +4,7 @@ Ticket Printing Application for 58mm Thermal Printer
 Supports: usb, serial, network, bluetooth (classic rfcomm), ble (BLE GATT)
 """
 from flask import Flask, request, render_template, jsonify
+from flask_cors import CORS
 from datetime import datetime
 import logging
 import os
@@ -22,6 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder='frontend')
+CORS(app)  # Enable CORS for frontend on different domain
 
 # Configuration
 TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"  # Set to 'true' to test without a printer
@@ -72,6 +74,37 @@ def build_ticket_text(from_name: str, question: str) -> str:
         "    ∴ May wisdom guide you ∴",
         "    .  *  .   *   .  *  .",
     ]
+    return "\n".join(lines) + "\n"
+
+
+def format_date_string() -> str:
+    """Format current date/time as '7:22:00 PM on 12/12/2025'"""
+    now = datetime.now()
+    # Use lstrip to remove leading zeros for cross-platform compatibility
+    hour = now.strftime("%I").lstrip("0")
+    minute = now.strftime("%M")
+    second = now.strftime("%S")
+    ampm = now.strftime("%p")
+    month = str(now.month)
+    day = str(now.day)
+    year = now.strftime("%Y")
+    return f"{hour}:{minute}:{second} {ampm} on {month}/{day}/{year}"
+
+
+def build_print_content(content: str, include_separator: bool = True, include_date: bool = True) -> str:
+    """Build the final print content with optional separator and date"""
+    lines = []
+    
+    if include_separator:
+        lines.append("--------------------------------")
+    
+    if include_date:
+        lines.append(format_date_string())
+        lines.append("")  # blank line after date
+    
+    lines.append(content.strip())
+    lines.append("")  # trailing newline for spacing
+    
     return "\n".join(lines) + "\n"
 
 
@@ -229,6 +262,84 @@ def submit_ticket():
 
     except Exception as e:
         logger.error(f"Error processing ticket submission: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/print", methods=["POST"])
+def print_content():
+    """Handle generic print requests (text or image)"""
+    try:
+        data = request.json or {}
+        print_type = data.get("type", "text")  # 'text' or 'image'
+        content = data.get("content", "")
+
+        if not content:
+            return jsonify({"success": False, "error": "Content cannot be empty"}), 400
+
+        # Test mode - log to console instead of printing
+        if TEST_MODE:
+            now = datetime.now()
+            logger.info("=" * 40)
+            logger.info("TEST MODE - Would print:")
+            logger.info("=" * 40)
+            logger.info(f"Type: {print_type}")
+            logger.info(f"Date: {format_date_string()}")
+            if print_type == "text":
+                logger.info(f"Content: {content}")
+            else:
+                logger.info(f"Image data length: {len(content)} chars")
+            logger.info("=" * 40)
+            return jsonify({"success": True, "message": "Printed (TEST MODE)"}), 200
+
+        # BLE printing path
+        if PRINTER_TYPE == "ble":
+            if not BLE_PRINTER_ADDR:
+                return jsonify({"success": False, "error": "BLE_PRINTER_ADDR is not set"}), 500
+
+            if print_type == "text":
+                text_to_print = build_print_content(content)
+                ble_print_text(BLE_PRINTER_ADDR, text_to_print)
+            else:  # image
+                processed_image = process_image_base64(content)
+                if processed_image is None:
+                    return jsonify({"success": False, "error": "Failed to process image"}), 400
+                # Print separator, date, then image
+                header_text = build_print_content("", include_separator=True, include_date=True)
+                ble_print_text_with_image(BLE_PRINTER_ADDR, header_text, processed_image)
+
+            logger.info(f"Printed {print_type} successfully over BLE")
+            return jsonify({"success": True, "message": "Printed successfully (BLE)"}), 200
+
+        # Non-BLE printing (escpos)
+        printer = get_printer()
+        if printer is None:
+            return jsonify({"success": False, "error": "Printer not available"}), 500
+
+        if print_type == "text":
+            text_to_print = build_print_content(content)
+            printer.set(align="left", font="a", width=1, height=1, bold=False)
+            printer.text(text_to_print)
+            printer.text("\n\n")
+            printer.cut()
+        else:  # image
+            processed_image = process_image_base64(content)
+            if processed_image is None:
+                return jsonify({"success": False, "error": "Failed to process image"}), 400
+            # Print separator and date
+            printer.set(align="left", font="a", width=1, height=1, bold=False)
+            printer.text("--------------------------------\n")
+            printer.text(f"{format_date_string()}\n\n")
+            # Print image
+            printer.set(align="center")
+            printer.image(processed_image)
+            printer.text("\n\n")
+            printer.cut()
+
+        logger.info(f"Printed {print_type} successfully")
+        return jsonify({"success": True, "message": "Printed successfully"}), 200
+
+    except Exception as e:
+        logger.error(f"Error processing print request: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
