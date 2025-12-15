@@ -13,6 +13,7 @@ BLE_CHUNK_SIZE = int(os.getenv("BLE_CHUNK_SIZE", "20"))
 BLE_WRITE_GAP_SEC = float(os.getenv("BLE_WRITE_GAP_SEC", "0.02"))
 BLE_IMAGE_CHUNK_SIZE = int(os.getenv("BLE_IMAGE_CHUNK_SIZE", "100"))  # Larger chunks for images
 BLE_IMAGE_WRITE_GAP_SEC = float(os.getenv("BLE_IMAGE_WRITE_GAP_SEC", "0.05"))  # Slower for images
+BLE_SCAN_TIMEOUT = float(os.getenv("BLE_SCAN_TIMEOUT", "15"))  # Longer timeout for flaky connections
 
 
 def _chunk(data: bytes, n: int):
@@ -110,7 +111,9 @@ def process_image_base64(image_base64: str, max_width: int = 384) -> Optional[Im
         return None
 
 
-async def _find_device_by_address(addr: str, timeout: float = 8.0):
+async def _find_device_by_address(addr: str, timeout: float = None):
+    if timeout is None:
+        timeout = BLE_SCAN_TIMEOUT
     addr = addr.upper()
 
     def matcher(d, _ad):
@@ -119,25 +122,36 @@ async def _find_device_by_address(addr: str, timeout: float = 8.0):
     return await BleakScanner.find_device_by_filter(matcher, timeout=timeout)
 
 
-async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_gap: float = None):
+async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_gap: float = None, retries: int = 2):
     if chunk_size is None:
         chunk_size = BLE_CHUNK_SIZE
     if write_gap is None:
         write_gap = BLE_WRITE_GAP_SEC
     
-    device = await _find_device_by_address(addr, timeout=8.0)
-    if device is None:
-        raise RuntimeError(f"Printer not found in BLE scan: {addr}. Is it on (and not connected to another device)?")
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            device = await _find_device_by_address(addr)
+            if device is None:
+                raise RuntimeError(f"Printer not found in BLE scan: {addr}. Is it on (and not connected to another device)?")
 
-    async with BleakClient(device, timeout=20.0) as client:
-        if not client.is_connected:
-            raise RuntimeError("BLE connect failed (client not connected).")
+            async with BleakClient(device, timeout=20.0) as client:
+                if not client.is_connected:
+                    raise RuntimeError("BLE connect failed (client not connected).")
 
-        # Many printers are happiest with small writes (20 bytes) + tiny delay.
-        for part in _chunk(payload, chunk_size):
-            await client.write_gatt_char(BLE_WRITE_UUID, part, response=False)
-            if write_gap:
-                await asyncio.sleep(write_gap)
+                # Many printers are happiest with small writes (20 bytes) + tiny delay.
+                for part in _chunk(payload, chunk_size):
+                    await client.write_gatt_char(BLE_WRITE_UUID, part, response=False)
+                    if write_gap:
+                        await asyncio.sleep(write_gap)
+                return  # Success
+        except Exception as e:
+            last_error = e
+            if attempt < retries:
+                await asyncio.sleep(2)  # Wait before retry
+            continue
+    
+    raise last_error
 
 
 def ble_print_text(addr: str, text: str):
