@@ -163,6 +163,7 @@ async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_ga
     last_error = None
     for attempt in range(retries + 1):
         started_writing = False
+        write_complete = False
         try:
             device = await _find_device_by_address(addr)
             if device is None:
@@ -174,13 +175,21 @@ async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_ga
 
                 # Use response=True for flow control (faster for images)
                 # or response=False with delays for compatibility
-                for part in _chunk(payload, chunk_size):
+                chunks = list(_chunk(payload, chunk_size))
+                for i, part in enumerate(chunks):
                     await client.write_gatt_char(BLE_WRITE_UUID, part, response=use_response)
                     started_writing = True  # Mark that we've sent data
                     if not use_response and write_gap:
                         await asyncio.sleep(write_gap)
+                
+                write_complete = True  # All data sent successfully
                 return  # Success
         except Exception as e:
+            # If all data was sent, treat disconnect errors as success
+            # (the printer got all the data, disconnect is just cleanup)
+            if write_complete:
+                return  # Data was sent, ignore disconnect errors
+            
             last_error = e
             # Don't retry if we already started writing - it would cause duplicate prints
             if started_writing:
