@@ -268,8 +268,10 @@ def _run_ble_process(command, *, payload=b'', timeout):
         raise RuntimeError("Bluetooth timed out and its connection was reset. Printing was not confirmed. "
                            "Check the paper before resending.") from error
     if result.stderr:
-        logger.info("Bluetooth worker: %s", result.stderr.decode(errors='replace').strip())
+        logger.log(logging.ERROR if result.returncode else logging.INFO,
+                   "Bluetooth worker: %s", result.stderr.decode(errors='replace').strip())
     if result.returncode:
+        logger.error("Bluetooth worker exited with status %s", result.returncode)
         raise RuntimeError("Bluetooth could not finish the ticket. Its connection was reset. "
                            "Check the paper before resending.")
     return result.stdout.strip()

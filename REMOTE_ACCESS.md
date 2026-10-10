@@ -120,6 +120,11 @@ find the new one. A stable address requires the named-tunnel setup above.
 The password stays in the Pi's `.env` file. The pre-update backup is in
 `/home/sd/ticket-printer-backups/`.
 
+The Pi's `/etc/bluetooth/main.conf` already sets `ControllerMode = le`.
+The redundant `bt-le-only.service` helper is disabled: its unbounded `btmgmt`
+startup commands became stuck and blocked Bluetooth restarts. Its unit file is
+backed up alongside the app, and the normal `bluetooth.service` remains enabled.
+
 ### Common issues
 
 - **Printer busy or unresponsive, but the page loads:** printer operations run
