@@ -236,7 +236,10 @@ sudo systemctl status ticket-printer
 3. Use **+** to add a **Photo**, **Vocab Word**, or **Random Meme**. Vocab Word adds
    a random word and its definition; Random Meme attaches a random meme image.
    Vocab Word includes backup definitions for offline use; Random Meme needs an
-   internet connection. Both let you review the draft before sending. Image
+   internet connection. Samson fetches and validates meme images on the server,
+   trying another image when one is missing, too large, or corrupt. This avoids
+   image-host browser restrictions; failures keep the existing draft and photo.
+   Both let you review the draft before sending. Image
    previews and optional captions share the message box and print together as one
    ticket. You can also drop or paste an image into the box.
 4. Use the microphone button to record on the Pi. Review the transcript in the

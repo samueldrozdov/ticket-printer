@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Fetch random memes through Samson to avoid image-host browser restrictions,
+  with alternate images, bounded downloads, and draft preservation on failure.
 - Isolate printer operations from web workers, bound print and connection-check
   waits, and report busy or stalled hardware without blocking the website.
 - Keep each ticket preview or print error directly below its sender’s message,

@@ -655,24 +655,17 @@
         contentLoading = 'meme';
         updateComposer();
         announce('Finding a random meme…');
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 20000);
         try {
-            const response = await fetch('https://meme-api.com/gimme/memes/5', {
-                signal: controller.signal, cache: 'no-store', credentials: 'omit'
-            });
-            if (!response.ok) throw new Error('Memes unavailable');
-            const data = await response.json();
-            const choices = (data.memes || []).filter(meme =>
-                meme.nsfw === false && meme.spoiler === false &&
-                typeof meme.url === 'string' && meme.url.startsWith('https://') && meme.url !== lastMemeUrl);
-            if (!choices.length) throw new Error('No new meme available');
-            const meme = choices[Math.floor(Math.random() * choices.length)];
-            const imageResponse = await fetch(meme.url, { signal: controller.signal, credentials: 'omit' });
-            if (!imageResponse.ok) throw new Error('Meme image unavailable');
-            const image = await readImage(await imageResponse.blob(), meme.title || 'Random meme');
-            setImage(image);
-            lastMemeUrl = meme.url;
+            const query = lastMemeUrl ? `?exclude=${encodeURIComponent(lastMemeUrl)}` : '';
+            const data = await api(`/random-meme${query}`, { timeout: 20000 });
+            if (typeof data.image !== 'string' || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(data.image)) {
+                throw new Error('Invalid meme image');
+            }
+            const check = new Image();
+            check.src = data.image;
+            await check.decode();
+            setImage({ data: data.image, name: data.title || 'Random meme' });
+            lastMemeUrl = data.url;
             announce('Random meme attached. Review it before sending.');
         } catch (error) {
             console.warn('Could not load a random meme:', error);
@@ -680,7 +673,6 @@
             showError(message);
             announce(message);
         } finally {
-            clearTimeout(timeout);
             contentLoading = null;
             updateComposer();
             input.focus();

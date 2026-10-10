@@ -7,7 +7,7 @@ const { LiveListening } = require('../frontend/live-listening.js');
 const source = fs.readFileSync(require.resolve('../frontend/chat.js'), 'utf8');
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-async function fixture({ contentFetch, liveFetch, rememberedId = null } = {}) {
+async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null } = {}) {
     const nodes = new Map(), requests = [];
     let listener;
     const document = {
@@ -78,6 +78,10 @@ async function fixture({ contentFetch, liveFetch, rememberedId = null } = {}) {
             }
             if (address.endsWith('/microphone')) {
                 return Promise.resolve({ ok: true, json: async () => ({ success: true, enabled: false }) });
+            }
+            if (address.includes('/random-meme')) {
+                assert.ok(memeFetch, 'Unexpected meme request');
+                return memeFetch(address, options);
             }
             if (liveFetch && address.includes('/microphone/')) return liveFetch(new URL(address).pathname, options);
             assert.ok(address.endsWith('/print'));
@@ -229,10 +233,9 @@ test('a random meme is reviewed in the composer, then sent as a sender message f
     const meme = { title: 'A funny cat', url: 'https://images.test/cat.png', nsfw: false, spoiler: false };
     const image = { type: 'image/png', size: 10, data: 'data:image/png;base64,cat' };
     const f = await fixture({
-        async contentFetch(address) {
-            if (address === 'https://meme-api.com/gimme/memes/5') return { ok: true, json: async () => ({ memes: [meme] }) };
-            assert.equal(address, meme.url);
-            return { ok: true, blob: async () => image };
+        async memeFetch(address) {
+            assert.equal(address, 'http://samson.test/random-meme');
+            return { ok: true, json: async () => ({ success: true, image: image.data, title: meme.title, url: meme.url }) };
         }
     });
     f.type('For you');
@@ -258,6 +261,49 @@ test('a random meme is reviewed in the composer, then sent as a sender message f
     assert.equal(conversation[0], sent);
     assert.equal(conversation[1].className, 'message incoming');
     assert.equal(conversation[1].children[0].children[0].src, preview.image);
+});
+
+test('meme failure preserves the existing caption and photo and unlocks the composer', async () => {
+    for (const reply of [new Error('Network unavailable'), { success: false, error: 'No memes available' },
+                         { success: true, image: '<html>not an image</html>' }]) {
+        const f = await fixture({ memeFetch: async () => {
+            if (reply instanceof Error) throw reply;
+            return { ok: reply.success, status: reply.success ? 200 : 503, json: async () => reply };
+        } });
+        await f.attach('original.png');
+        f.type('Keep my caption');
+        await f.byId('memeButton').events.click();
+        assert.equal(f.byId('imagePreview').src, 'data:image/png;base64,original.png');
+        assert.equal(f.byId('imageAttachment').hidden, false);
+        assert.equal(f.byId('messageInput').value, 'Keep my caption');
+        assert.equal(f.byId('messageInput').readOnly, false);
+        assert.equal(f.byId('plusButton').disabled, false);
+        assert.equal(f.byId('sendButton').disabled, false);
+        assert.equal(f.requests.length, 0);
+        assert.match(f.byId('liveStatus').textContent, /draft is kept/);
+    }
+});
+
+test('meme loading ignores repeated taps and excludes the last successful image', async () => {
+    const addresses = [];
+    let finish;
+    const f = await fixture({ memeFetch: (address) => {
+        addresses.push(address);
+        return new Promise(resolve => { finish = () => resolve({ ok: true, json: async () => ({
+            success: true, image: 'data:image/png;base64,meme', title: 'Meme', url: 'https://i.redd.it/meme.png'
+        }) }); });
+    } });
+    const loading = f.byId('memeButton').events.click();
+    await f.byId('memeButton').events.click();
+    assert.equal(addresses.length, 1);
+    assert.equal(f.byId('plusButton').disabled, true);
+    finish();
+    await loading;
+    const next = f.byId('memeButton').events.click();
+    assert.equal(new URL(addresses[1]).searchParams.get('exclude'), 'https://i.redd.it/meme.png');
+    finish();
+    await next;
+    assert.equal(f.requests.length, 0);
 });
 
 for (const offline of [false, true]) {

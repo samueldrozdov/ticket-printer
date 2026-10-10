@@ -30,6 +30,7 @@ from microphone import create_microphone_blueprint, microphone_from_environment
 from remote_access import configure_remote_access
 from print_history import PrintHistory
 from printer_worker import PrinterUnavailable, PrinterWorker, timeout_setting
+from memes import create_meme_blueprint
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -59,6 +60,7 @@ def serialized_print(function):
 
 app = Flask(__name__, template_folder='frontend', static_folder='frontend', static_url_path='')
 configure_remote_access(app)
+app.register_blueprint(create_meme_blueprint())
 if not app.config["SAMSON_PASSWORD_REQUIRED"]:
     CORS(app)  # Separate frontends are supported in the original local mode.
 
