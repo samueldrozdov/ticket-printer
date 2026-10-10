@@ -90,6 +90,7 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
                 succeed(data = { success: true, test_mode: true }) {
                     resolve({ ok: true, json: async () => data });
                 },
+                respond: resolve,
                 fail: reject
             }));
         }
@@ -106,6 +107,21 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
         }
     };
 }
+
+test('an HTML gateway timeout preserves the message without blaming the API address or retrying', async () => {
+    const f = await fixture();
+    f.type('Keep this ticket');
+    f.send();
+    await settle();
+    f.requests[0].respond({ ok: false, status: 504, json: async () => { throw new SyntaxError('HTML'); } });
+    await settle();
+    assert.equal(f.requests.length, 1);
+    const reply = f.byId('messageTrack').children[1];
+    assert.match(reply.children[0].textContent, /connection to Samson timed out \(HTTP 504\)/);
+    assert.doesNotMatch(reply.children[0].textContent, /API address/);
+    assert.equal(f.outgoing()[0].children[0].textContent, 'Keep this ticket');
+    assert.match(f.outgoing()[0].children.at(-1).textContent, /not confirmed/i);
+});
 
 test('a failed page-load status check keeps the listening bar hidden through retries and recovery', async () => {
     let offline = true;

@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -51,9 +51,9 @@ class TicketLayoutTests(unittest.TestCase):
 
     def test_ble_transport_sends_prepared_ticket_bytes_unchanged(self):
         payload = ticket_payload(render_ticket('hello\n'))
-        with patch.object(ble_printer, '_ble_write', new_callable=AsyncMock) as write:
+        with patch.object(ble_printer, '_print_in_process') as write:
             ble_printer.ble_print_raster_ticket('printer', payload)
-        write.assert_awaited_once_with('printer', payload,
+        write.assert_called_once_with('printer', payload,
                                      ble_printer.BLE_IMAGE_CHUNK_SIZE,
                                      ble_printer.BLE_IMAGE_WRITE_GAP_SEC)
 

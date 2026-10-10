@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Respect Bluetooth packet limits, time out stalled writes, and stop stuck
+  Bluetooth processes so printing can recover without restarting the website.
+- Describe HTML gateway failures as connection errors while preserving the
+  unconfirmed message, rather than suggesting an incorrect API address.
 - Fetch random memes through Samson to avoid image-host browser restrictions,
   with alternate images, bounded downloads, and draft preservation on failure.
 - Isolate printer operations from web workers, bound print and connection-check

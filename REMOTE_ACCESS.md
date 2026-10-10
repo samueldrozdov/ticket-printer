@@ -130,10 +130,16 @@ The password stays in the Pi's `.env` file. The pre-update backup is in
   with positive `PRINTER_OPERATION_TIMEOUT` and `PRINTER_CHECK_TIMEOUT` values
   in seconds. The existing operation retains exclusive printer access until it
   actually exits; a timeout never starts a retry or a second hardware worker.
-  A timed-out job may still print. Check the paper before resending. If the
-  driver never returns, `sudo systemctl restart ticket-printer` releases it
-  while keeping the tunnel URL. A live-listening queue stops on a rejected or
-  timed-out print rather than silently retrying it.
+  Bluetooth calls additionally run in a child process: each write has a
+  5-second deadline, disconnect has a 3-second deadline, and the entire process
+  is killed and reaped after 60 seconds if the driver cannot be cancelled.
+  This releases Bluetooth access for a later request without restarting the
+  app. Packets are capped to the negotiated connection size, and no write is
+  retried once sending starts, even if its first acknowledgement is lost.
+  Check the paper before resending an unconfirmed ticket. Other printer
+  drivers may still need `sudo systemctl restart ticket-printer` if they never
+  return; this keeps the tunnel URL. A live-listening queue stops on a rejected
+  or timed-out print rather than silently retrying it.
 
 - **Missing password:** startup fails before opening a listener or tunnel. Set
   `SAMSON_PASSWORD` in the root `.env` and try again.

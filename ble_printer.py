@@ -1,11 +1,18 @@
 import asyncio
 import base64
 import io
+import logging
 import os
+from pathlib import Path
+import subprocess
+import sys
 from typing import Optional
 
 from bleak import BleakClient, BleakScanner
 from PIL import Image
+from printer_worker import timeout_setting
+
+logger = logging.getLogger(__name__)
 
 
 BLE_WRITE_UUID = os.getenv("BLE_WRITE_UUID", "").strip() or "00002af1-0000-1000-8000-00805f9b34fb"
@@ -15,6 +22,8 @@ BLE_IMAGE_CHUNK_SIZE = int(os.getenv("BLE_IMAGE_CHUNK_SIZE", "200"))  # Larger c
 BLE_IMAGE_WRITE_GAP_SEC = float(os.getenv("BLE_IMAGE_WRITE_GAP_SEC", "0.01"))  # Faster default
 BLE_USE_RESPONSE = os.getenv("BLE_USE_RESPONSE", "true").lower() in ("true", "1", "yes")  # Use response-based flow control
 BLE_SCAN_TIMEOUT = float(os.getenv("BLE_SCAN_TIMEOUT", "15"))  # Longer timeout for flaky connections
+BLE_WRITE_TIMEOUT = timeout_setting("BLE_WRITE_TIMEOUT", 5)
+BLE_PROCESS_TIMEOUT = timeout_setting("BLE_PROCESS_TIMEOUT", 60)
 
 # Image processing settings
 IMAGE_MAX_WIDTH = int(os.getenv("IMAGE_MAX_WIDTH", "384"))  # 384 for 58mm, 576 for 80mm printers
@@ -169,7 +178,7 @@ async def _find_device_by_address(addr: str, timeout: float = None):
     return await BleakScanner.find_device_by_filter(matcher, timeout=timeout)
 
 
-async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_gap: float = None, use_response: bool = None, retries: int = 2):
+async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_gap: float = None, use_response: bool = None, retries: int = 2, on_written=None):
     if chunk_size is None:
         chunk_size = BLE_CHUNK_SIZE
     if write_gap is None:
@@ -181,26 +190,49 @@ async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_ga
     for attempt in range(retries + 1):
         started_writing = False
         write_complete = False
+        client = None
         try:
-            device = await _find_device_by_address(addr)
+            device = await asyncio.wait_for(_find_device_by_address(addr), BLE_SCAN_TIMEOUT + 1)
             if device is None:
                 raise RuntimeError(f"Printer not found in BLE scan: {addr}. Is it on (and not connected to another device)?")
 
-            async with BleakClient(device, timeout=20.0) as client:
+            client = BleakClient(device, timeout=20.0)
+            try:
+                await asyncio.wait_for(client.connect(), 20)
                 if not client.is_connected:
                     raise RuntimeError("BLE connect failed (client not connected).")
-
-                # Use response=True for flow control (faster for images)
-                # or response=False with delays for compatibility
-                chunks = list(_chunk(payload, chunk_size))
-                for i, part in enumerate(chunks):
-                    await client.write_gatt_char(BLE_WRITE_UUID, part, response=use_response)
-                    started_writing = True  # Mark that we've sent data
-                    if not use_response and write_gap:
+                characteristic = client.services.get_characteristic(BLE_WRITE_UUID)
+                if characteristic is None:
+                    raise RuntimeError("The printer's Bluetooth write service is unavailable.")
+                response = use_response
+                if response and 'write' not in characteristic.properties:
+                    response = False
+                # A large acknowledged write can become an unsupported ATT long
+                # write on small printers. Stay within one negotiated packet.
+                packet_limit = (max(1, client.mtu_size - 3) if response else
+                                characteristic.max_write_without_response_size)
+                size = min(chunk_size, packet_limit, 512)
+                if size <= 0:
+                    raise ValueError("Bluetooth chunk size must be positive")
+                logger.info("Bluetooth sending %d bytes in %d-byte packets (response=%s)",
+                            len(payload), size, response)
+                for part in _chunk(payload, size):
+                    # A lost first acknowledgement can still mean bytes reached
+                    # the printer. Never replay any attempted write.
+                    started_writing = True
+                    await asyncio.wait_for(client.write_gatt_char(characteristic, part, response=response),
+                                           BLE_WRITE_TIMEOUT)
+                    if write_gap:
                         await asyncio.sleep(write_gap)
-                
                 write_complete = True  # All data sent successfully
+                if on_written:
+                    on_written()
                 return  # Success
+            finally:
+                try:
+                    await asyncio.wait_for(client.disconnect(), 3)
+                except Exception:
+                    logger.warning("Bluetooth disconnect did not complete", exc_info=True)
         except Exception as e:
             # If all data was sent, treat disconnect errors as success
             # (the printer got all the data, disconnect is just cleanup)
@@ -210,6 +242,9 @@ async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_ga
             last_error = e
             # Don't retry if we already started writing - it would cause duplicate prints
             if started_writing:
+                if isinstance(e, asyncio.TimeoutError):
+                    raise RuntimeError("Bluetooth stopped responding during the ticket. "
+                                       "Check the paper before resending.") from e
                 raise
             if attempt < retries:
                 await asyncio.sleep(2)  # Wait before retry
@@ -218,9 +253,38 @@ async def _ble_write(addr: str, payload: bytes, chunk_size: int = None, write_ga
     raise last_error
 
 
+def _run_ble_process(command, *, payload=b'', timeout):
+    """Kill and reap stuck BLE code before releasing the shared hardware slot."""
+    try:
+        result = subprocess.run(command, input=payload, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired as error:
+        # subprocess.run has already killed and waited for the child. A flushed
+        # receipt means every packet was accepted; only cleanup was stuck.
+        if b'written\n' in (error.stdout or b'').splitlines(keepends=True):
+            logger.warning("Bluetooth cleanup stalled after all bytes were sent; process stopped")
+            return b'written'
+        logger.error("Stopped stalled Bluetooth process after %.1fs", timeout)
+        raise RuntimeError("Bluetooth timed out and its connection was reset. Printing was not confirmed. "
+                           "Check the paper before resending.") from error
+    if result.stderr:
+        logger.info("Bluetooth worker: %s", result.stderr.decode(errors='replace').strip())
+    if result.returncode:
+        raise RuntimeError("Bluetooth could not finish the ticket. Its connection was reset. "
+                           "Check the paper before resending.")
+    return result.stdout.strip()
+
+
+def _print_in_process(addr, payload, chunk_size=BLE_CHUNK_SIZE, write_gap=BLE_WRITE_GAP_SEC):
+    result = _run_ble_process([sys.executable, str(Path(__file__).resolve()), 'write', addr,
+                               str(chunk_size), str(write_gap)], payload=payload, timeout=BLE_PROCESS_TIMEOUT)
+    if result != b'written':
+        raise RuntimeError("The Bluetooth worker exited without confirming the ticket. Check the paper before resending.")
+
+
 def ble_print_text(addr: str, text: str):
     payload = _escpos_frame(text)
-    asyncio.run(_ble_write(addr, payload))
+    _print_in_process(addr, payload)
 
 
 def ble_print_image(addr: str, image: Image.Image):
@@ -235,12 +299,12 @@ def ble_print_image(addr: str, image: Image.Image):
     payload = init_cmd + image_data + footer
     
     # Use larger chunks and slower timing for image data
-    asyncio.run(_ble_write(addr, payload, BLE_IMAGE_CHUNK_SIZE, BLE_IMAGE_WRITE_GAP_SEC))
+    _print_in_process(addr, payload, BLE_IMAGE_CHUNK_SIZE, BLE_IMAGE_WRITE_GAP_SEC)
 
 
 def ble_print_raster_ticket(addr: str, payload: bytes):
     """Send an already rendered ticket without changing its pixels."""
-    asyncio.run(_ble_write(addr, payload, BLE_IMAGE_CHUNK_SIZE, BLE_IMAGE_WRITE_GAP_SEC))
+    _print_in_process(addr, payload, BLE_IMAGE_CHUNK_SIZE, BLE_IMAGE_WRITE_GAP_SEC)
 
 
 def ble_print_text_with_image(addr: str, text: str, image: Optional[Image.Image] = None):
@@ -262,14 +326,27 @@ def ble_print_text_with_image(addr: str, text: str, image: Optional[Image.Image]
     
     # Use image timing if we have an image, otherwise text timing
     if image is not None:
-        asyncio.run(_ble_write(addr, payload, BLE_IMAGE_CHUNK_SIZE, BLE_IMAGE_WRITE_GAP_SEC))
+        _print_in_process(addr, payload, BLE_IMAGE_CHUNK_SIZE, BLE_IMAGE_WRITE_GAP_SEC)
     else:
-        asyncio.run(_ble_write(addr, payload))
+        _print_in_process(addr, payload)
 
 
 def ble_is_available(addr: str) -> bool:
-    async def _check():
-        device = await _find_device_by_address(addr, timeout=3.0)
-        return device is not None
+    return _run_ble_process([sys.executable, str(Path(__file__).resolve()), 'check', addr],
+                            timeout=4.5) == b'available'
 
-    return asyncio.run(_check())
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    try:
+        if sys.argv[1] == 'check':
+            device = asyncio.run(_find_device_by_address(sys.argv[2], timeout=3))
+            print('available' if device is not None else 'unavailable', flush=True)
+        elif sys.argv[1] == 'write':
+            asyncio.run(_ble_write(sys.argv[2], sys.stdin.buffer.read(), int(sys.argv[3]), float(sys.argv[4]),
+                                   on_written=lambda: print('written', flush=True)))
+        else:
+            raise ValueError('Unknown Bluetooth operation')
+    except Exception:
+        logger.exception('Bluetooth operation failed')
+        raise SystemExit(1)

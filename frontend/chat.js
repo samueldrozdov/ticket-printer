@@ -72,7 +72,17 @@
             });
             let data;
             try { data = await response.json(); }
-            catch { throw new Error('Samson returned an unexpected response. Check the API address.'); }
+            catch {
+                const status = response.status;
+                if ([504, 522, 524].includes(status)) {
+                    throw new Error(`The connection to Samson timed out (HTTP ${status}).`);
+                }
+                if (status >= 500) throw new Error(`Samson’s connection failed (HTTP ${status}).`);
+                if (response.redirected && /\/login(?:\?|$)/.test(response.url || '')) {
+                    throw new Error('Your Samson session expired. Reload the page to sign in again.');
+                }
+                throw new Error('Samson returned an unreadable reply. Reload the page before trying again.');
+            }
             setConnected(true);
             if (!response.ok || data.success === false) {
                 const error = new Error(data.error || 'Samson couldn’t complete that request.');
