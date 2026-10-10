@@ -2,767 +2,163 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ticket Printer</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 500px;
-            width: 100%;
-            padding: 40px;
-        }
-
-        h1 {
-            color: #333;
-            text-align: left;
-            margin-bottom: 24px;
-            font-size: 1.8em;
-            font-weight: 600;
-        }
-
-        /* Tab Navigation */
-        .tab-nav {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 24px;
-        }
-
-        .tab-btn {
-            padding: 10px 20px;
-            border: 2px solid #e0e0e0;
-            background: white;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 500;
-            color: #666;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .tab-btn:hover {
-            border-color: #667eea;
-            color: #667eea;
-        }
-
-        .tab-btn.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-color: transparent;
-            color: white;
-        }
-
-        /* Tab Content */
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        textarea {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 1em;
-            font-family: inherit;
-            transition: border-color 0.3s;
-            resize: vertical;
-            min-height: 150px;
-        }
-
-        textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        textarea::placeholder {
-            color: #aaa;
-        }
-
-        .image-upload-container {
-            border: 2px dashed #e0e0e0;
-            border-radius: 10px;
-            padding: 40px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: border-color 0.3s, background-color 0.3s;
-        }
-
-        .image-upload-container:hover {
-            border-color: #667eea;
-            background-color: #f8f9ff;
-        }
-
-        .image-upload-container.has-image {
-            border-style: solid;
-            border-color: #667eea;
-            padding: 20px;
-        }
-
-        .image-upload-container input[type="file"] {
-            display: none;
-        }
-
-        .upload-icon {
-            font-size: 2.5em;
-            margin-bottom: 12px;
-        }
-
-        .upload-text {
-            color: #666;
-            font-size: 1em;
-        }
-
-        .upload-hint {
-            color: #999;
-            font-size: 0.85em;
-            margin-top: 8px;
-        }
-
-        .image-preview {
-            max-width: 100%;
-            max-height: 200px;
-            border-radius: 8px;
-            margin-top: 10px;
-            display: none;
-        }
-
-        .image-preview.visible {
-            display: block;
-        }
-
-        .remove-image-btn {
-            background: #ff4757;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.9em;
-            margin-top: 10px;
-            transition: background-color 0.2s;
-        }
-
-        .remove-image-btn:hover {
-            background: #ff3344;
-        }
-
-        .submit-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .submit-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-        }
-
-        .submit-btn:active {
-            transform: translateY(0);
-        }
-
-        .submit-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .message {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-            font-weight: 500;
-            display: none;
-        }
-
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-            display: block;
-        }
-
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-            display: block;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 10px;
-        }
-
-        /* Vocab Tab Styles */
-        .vocab-card {
-            background: #f8f9ff;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            padding: 24px;
-            margin-bottom: 20px;
-            min-height: 180px;
-        }
-
-        .vocab-loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #666;
-            padding: 40px 0;
-        }
-
-        .vocab-loading .loading {
-            border: 3px solid rgba(102, 126, 234, 0.3);
-            border-top-color: #667eea;
-        }
-
-        .vocab-word {
-            font-size: 1.6em;
-            font-weight: 700;
-            color: #333;
-            margin-bottom: 4px;
-        }
-
-        .vocab-phonetic {
-            font-size: 1em;
-            color: #888;
-            font-style: italic;
-            margin-bottom: 12px;
-        }
-
-        .vocab-pos {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 500;
-            margin-bottom: 12px;
-        }
-
-        .vocab-definition {
-            font-size: 1em;
-            color: #444;
-            line-height: 1.5;
-            margin-bottom: 12px;
-        }
-
-        .vocab-example {
-            font-size: 0.95em;
-            color: #666;
-            font-style: italic;
-            padding-left: 12px;
-            border-left: 3px solid #667eea;
-        }
-
-        .vocab-example:empty {
-            display: none;
-        }
-
-        .vocab-error {
-            color: #721c24;
-            text-align: center;
-            padding: 40px 0;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
+    <title>Samson · Messages</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="chat.css">
+    <script>
+        // Set this URL when the frontend is hosted separately from Samson.
+        const productionApiUrl = 'YOUR_API_URL_HERE';
+        window.PRINTER_API_URL = (
+            window._env?.REACT_APP_API_URL ||
+            (productionApiUrl !== 'YOUR_API_URL_HERE' ? productionApiUrl : '') ||
+            window.location.origin
+        ).replace(/\/$/, '');
+    </script>
+    <script src="live-listening.js" defer></script>
+    <script src="settings.js" defer></script>
+    <script src="history.js" defer></script>
+    <script src="chat.js" defer></script>
 </head>
 <body>
-    <div class="container">
-        <h1>Ticket Printer</h1>
-        
-        <!-- Tab Navigation -->
-        <div class="tab-nav">
-            <button class="tab-btn active" data-tab="text">Text</button>
-            <button class="tab-btn" data-tab="image">Image</button>
-            <button class="tab-btn" data-tab="vocab">Vocab</button>
-        </div>
-
-        <!-- Text Tab -->
-        <div id="tab-text" class="tab-content active">
-            <form id="basicForm">
-                <div class="form-group">
-                    <textarea id="basicText" name="text" placeholder="Enter text to print..." required maxlength="1000"></textarea>
-                </div>
-                <button type="submit" class="submit-btn" id="basicSubmitBtn">Print</button>
-            </form>
-        </div>
-
-        <!-- Image Tab -->
-        <div id="tab-image" class="tab-content">
-            <form id="imageForm">
-                <div class="form-group">
-                    <div class="image-upload-container" id="imageUploadContainer">
-                        <input type="file" id="imageInput" name="image" accept="image/*">
-                        <div class="upload-icon">📷</div>
-                        <div class="upload-text">Click or drag to upload an image</div>
-                        <div class="upload-hint">PNG, JPG, GIF up to 5MB</div>
-                        <img id="imagePreview" class="image-preview" alt="Preview">
-                        <button type="button" class="remove-image-btn" id="removeImageBtn" style="display: none;">Remove Image</button>
+    <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="icon-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></symbol>
+        <symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+        <symbol id="icon-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+        <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+        <symbol id="icon-book" viewBox="0 0 24 24"><path d="M12 5c-3-2-6-2-10-1v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1v15"/></symbol>
+        <symbol id="icon-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 9h.01M16 9h.01M8 14a4 4 0 0 0 8 0"/></symbol>
+        <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+        <symbol id="icon-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+        <symbol id="icon-live" viewBox="0 0 24 24"><path d="M3 10v4M7 6v12M11 3v18M15 8v8M19 5v14M23 10v4"/></symbol>
+        <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    </svg>
+    <main class="chat-app" aria-label="Conversation with Samson">
+        <header class="chat-header">
+            <h1 class="contact-heading"><button class="contact" id="contactButton" type="button" aria-label="Samson settings and info" aria-haspopup="dialog" aria-controls="samsonSettings">
+                <span class="avatar" id="piAvatar" role="img" aria-label="Samson, checking connection" data-connection="checking">
+                    <img src="assets/samson-avatar.png" alt="" width="44" height="44">
+                </span>
+                <span class="contact-name">Samson <svg aria-hidden="true"><use href="#icon-chevron"/></svg></span>
+            </button></h1>
+        </header>
+        <dialog class="samson-settings" id="samsonSettings" aria-labelledby="samsonSettingsTitle">
+            <button class="icon-button settings-close" id="closeSamsonSettings" type="button" aria-label="Close settings" autofocus><svg aria-hidden="true"><use href="#icon-close"/></svg></button>
+            <div class="settings-profile"><img src="assets/samson-avatar.png" alt="" width="72" height="72"><h2 id="samsonSettingsTitle">Samson</h2></div>
+            <section class="settings-section" aria-labelledby="settingsHeading">
+                <h3 id="settingsHeading">Messages</h3>
+                <div class="settings-list">
+                    <label class="settings-row date-setting" for="includeDate"><span>Include date</span><input id="includeDate" type="checkbox" role="switch" checked><span class="settings-switch" aria-hidden="true"></span></label>
+                    <div class="settings-row spacing-setting">
+                        <span id="messageSpacingLabel">Spacing</span>
+                        <div class="spacing-options" role="radiogroup" aria-labelledby="messageSpacingLabel">
+                            <label><input id="feedLinesNone" type="radio" name="messageSpacing" value="0" aria-label="Small message spacing"><span>S</span></label>
+                            <label><input id="feedLinesDefault" type="radio" name="messageSpacing" value="3" aria-label="Medium message spacing" checked><span>M</span></label>
+                            <label><input id="feedLinesLarge" type="radio" name="messageSpacing" value="10" aria-label="Large message spacing"><span>L</span></label>
+                        </div>
+                    </div>
+                    <label class="settings-row font-setting" for="fontFamily"><span>Font</span><span class="font-select">
+                        <select id="fontFamily">
+                            <option value="mono" selected>Monospace</option>
+                            <option value="sans">Sans</option>
+                            <option value="serif">Serif</option>
+                        </select>
+                        <svg aria-hidden="true"><use href="#icon-chevron"/></svg>
+                    </span></label>
+                    <div class="settings-row font-size-setting">
+                        <span id="fontSizeLabel">Font size</span>
+                        <div class="spacing-options" role="radiogroup" aria-labelledby="fontSizeLabel">
+                            <label><input id="fontSizeSmall" type="radio" name="fontSize" value="small" aria-label="Small font size"><span>S</span></label>
+                            <label><input id="fontSizeMedium" type="radio" name="fontSize" value="medium" aria-label="Medium font size" checked><span>M</span></label>
+                            <label><input id="fontSizeLarge" type="radio" name="fontSize" value="large" aria-label="Large font size"><span>L</span></label>
+                        </div>
                     </div>
                 </div>
-                <button type="submit" class="submit-btn" id="imageSubmitBtn">Print</button>
+            </section>
+            <section class="settings-section" aria-labelledby="infoHeading">
+                <div class="connection-heading"><h3 id="infoHeading">Connection</h3><button id="refreshConnections" type="button">Check again</button></div>
+                <div class="server-notice" id="serverNotice" hidden><strong id="serverNoticeTitle"></strong><p id="serverNoticeText"></p></div>
+                <dl class="connection-list" aria-live="polite">
+                    <div class="settings-row"><dt><span id="serverLabel">Server</span><small id="serverAddress"></small></dt><dd class="connection-status" id="piConnection" data-state="checking">Checking…</dd></div>
+                    <div class="settings-row"><dt>Microphone</dt><dd class="connection-status" id="microphoneConnection" data-state="checking">Checking…</dd></div>
+                    <div class="settings-row"><dt>Printer<small id="printerTransport"></small></dt><dd class="connection-status" id="printerConnection" data-state="checking">Checking…</dd></div>
+                </dl>
+                <p class="settings-note connection-explanation" id="printerExplanation" role="status"></p>
+            </section>
+        </dialog>
+        <div class="messages" id="messages" role="log" aria-label="Messages with Samson" aria-live="polite" aria-relevant="additions text">
+            <div class="message-track" id="messageTrack">
+                <section class="print-history" id="printHistory" aria-labelledby="historyTitle">
+                    <h2 id="historyTitle" hidden>Print history</h2>
+                    <p class="history-notice" id="historyNotice" role="status"><span id="historyNoticeText">Loading saved tickets…</span> <button class="history-retry" id="historyRetry" type="button" hidden>Retry</button></p>
+                    <button class="history-more" id="historyMore" type="button" hidden>Load older tickets</button>
+                    <div class="history-entries" id="historyEntries"></div>
+                </section>
+                <p class="day-label" id="dayLabel">Today</p>
+                <article class="message incoming">
+                    <div class="bubble">Hey, I’m Samson. 👋</div>
+                </article>
+            </div>
+        </div>
+        <div class="composer-area">
+            <div class="add-menu" id="addMenu" aria-label="Add to your message" hidden>
+                <button id="photoButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-image"/></svg></span>Photo</button>
+                <button id="vocabButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-book"/></svg></span>Vocab Word</button>
+                <button id="memeButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-smile"/></svg></span>Random Meme</button>
+                <div class="menu-divider"></div>
+                <button id="listenButton" type="button" aria-controls="listenSettings"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-live"/></svg></span><span class="menu-copy">Listen &amp; print<small>Print as you speak</small></span><svg class="menu-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg></button>
+            </div>
+            <form class="listen-settings" id="listenSettings" aria-labelledby="listenSettingsTitle" hidden>
+                <div class="listen-heading"><h2 id="listenSettingsTitle">Listen &amp; print</h2><button class="icon-button listen-close" id="closeListenSettings" type="button" aria-label="Back to plus menu"><svg aria-hidden="true"><use href="#icon-close"/></svg></button></div>
+                <p class="listen-description">Samson keeps listening and puts what you say on paper, automatically.</p>
+                <div class="listen-fields">
+                    <div class="listen-option"><label for="listenCadence">Print every</label><select id="listenCadence"><option value="10">10 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="300">5 minutes</option><option value="custom">Custom…</option></select><label class="listen-custom" id="customCadenceRow" hidden><input id="customCadence" type="number" min="1" max="300" step="1" value="20" aria-label="Print interval in seconds" disabled required>seconds · up to 300</label></div>
+                    <div class="listen-option"><label for="listenDuration">Stop after</label><select id="listenDuration"><option value="0">Until I stop</option><option value="300">5 minutes</option><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="custom">Custom…</option></select><label class="listen-custom" id="customDurationRow" hidden><input id="customDuration" type="number" min="1" max="1440" step="1" value="10" aria-label="Listening duration in minutes" disabled required>minutes · up to 1,440</label></div>
+                </div>
+                <p class="listen-hint">Silence won’t print. Listening continues if you close this page.</p>
+                <p class="listen-error" id="listenSettingsError" role="alert" hidden></p>
+                <button class="listen-start" id="startListening" type="submit" disabled><svg aria-hidden="true"><use href="#icon-mic"/></svg><span>Start listening</span></button>
+            </form>
+            <div class="listening-bar" id="listeningBar" hidden>
+                <svg class="listening-icon" aria-hidden="true"><use href="#icon-live"/></svg>
+                <div class="listening-copy"><div class="listening-title"><span id="listeningLabel">Starting…</span><time id="listeningTime">0:00</time></div><p id="listeningDetails" class="listening-details"></p><p id="listeningWarning" class="listening-warning" hidden></p></div>
+                <button class="listening-stop" id="stopListening" type="button"><svg aria-hidden="true"><use href="#icon-stop"/></svg><span>Stop</span></button>
+            </div>
+            <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+            <form class="composer" id="messageForm">
+                <button class="icon-button plus-button" id="plusButton" type="button" aria-label="Add to your message" aria-controls="addMenu listenSettings" aria-expanded="false">
+                    <svg aria-hidden="true"><use href="#icon-plus"/></svg>
+                </button>
+                <div class="message-field" id="messageField">
+                    <div class="image-attachment" id="imageAttachment" hidden>
+                        <img id="imagePreview" alt="Photo to send to Samson">
+                        <button class="icon-button remove-image" id="removeImageButton" type="button" aria-label="Remove photo">
+                            <svg aria-hidden="true"><use href="#icon-close"/></svg>
+                        </button>
+                    </div>
+                    <div class="input-row">
+                        <textarea id="messageInput" rows="1" maxlength="1000" aria-label="Message Samson" placeholder="Message Samson"></textarea>
+                        <div class="recording" id="recording" hidden>
+                            <div class="recording-bar"><span class="recording-label" id="recordingLabel">Starting…</span><time id="recordingTime">0:00</time></div>
+                            <p class="partial-transcript" id="partialTranscript" hidden></p>
+                        </div>
+                        <button class="icon-button send-button" id="sendButton" type="submit" aria-label="Send to Samson" hidden>
+                            <svg aria-hidden="true"><use href="#icon-send"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <button class="icon-button microphone-button" id="microphoneButton" type="button" aria-label="Record on Samson" aria-pressed="false" disabled>
+                    <svg id="microphoneIcon" aria-hidden="true"><use href="#icon-mic"/></svg>
+                    <svg id="stopIcon" aria-hidden="true" hidden><use href="#icon-stop"/></svg>
+                </button>
             </form>
         </div>
-
-        <!-- Vocab Tab -->
-        <div id="tab-vocab" class="tab-content">
-            <div class="vocab-card">
-                <div class="vocab-loading" id="vocabLoading">
-                    <span class="loading"></span> Loading word of the day...
-                </div>
-                <div class="vocab-content" id="vocabContent" style="display: none;">
-                    <div class="vocab-word" id="vocabWord"></div>
-                    <div class="vocab-phonetic" id="vocabPhonetic"></div>
-                    <div class="vocab-pos" id="vocabPos"></div>
-                    <div class="vocab-definition" id="vocabDefinition"></div>
-                    <div class="vocab-example" id="vocabExample"></div>
-                </div>
-                <div class="vocab-error" id="vocabError" style="display: none;">
-                    Could not load vocabulary word. Please try again later.
-                </div>
-            </div>
-            <button type="button" class="submit-btn" id="vocabSubmitBtn">Print</button>
-        </div>
-        
-        <div class="message" id="message"></div>
-    </div>
-
-    <script>
-        // API endpoint configuration
-        const API_URL = (() => {
-            const hostname = window.location.hostname;
-            
-            if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                return `http://${hostname}:5000`;
-            }
-            
-            if (window._env && window._env.REACT_APP_API_URL) {
-                return window._env.REACT_APP_API_URL;
-            }
-            
-            const productionApiUrl = 'YOUR_API_URL_HERE';
-            return productionApiUrl || '/api';
-        })();
-
-        // Tab navigation
-        const tabBtns = document.querySelectorAll('.tab-btn');
-        const tabContents = document.querySelectorAll('.tab-content');
-
-        tabBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tabId = btn.dataset.tab;
-                
-                // Update button states
-                tabBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                
-                // Update content visibility
-                tabContents.forEach(content => {
-                    content.classList.remove('active');
-                    if (content.id === `tab-${tabId}`) {
-                        content.classList.add('active');
-                    }
-                });
-                
-                // Clear any messages when switching tabs
-                hideMessage();
-            });
-        });
-
-        // Basic form elements
-        const basicForm = document.getElementById('basicForm');
-        const basicText = document.getElementById('basicText');
-        const basicSubmitBtn = document.getElementById('basicSubmitBtn');
-
-        // Image form elements
-        const imageForm = document.getElementById('imageForm');
-        const imageInput = document.getElementById('imageInput');
-        const imagePreview = document.getElementById('imagePreview');
-        const imageUploadContainer = document.getElementById('imageUploadContainer');
-        const removeImageBtn = document.getElementById('removeImageBtn');
-        const imageSubmitBtn = document.getElementById('imageSubmitBtn');
-        
-        const messageDiv = document.getElementById('message');
-        
-        let selectedImageBase64 = null;
-
-        // Image upload handling
-        imageUploadContainer.addEventListener('click', (e) => {
-            if (e.target !== removeImageBtn) {
-                imageInput.click();
-            }
-        });
-
-        // Drag and drop support
-        imageUploadContainer.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            imageUploadContainer.style.borderColor = '#667eea';
-            imageUploadContainer.style.backgroundColor = '#f8f9ff';
-        });
-
-        imageUploadContainer.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            if (!selectedImageBase64) {
-                imageUploadContainer.style.borderColor = '#e0e0e0';
-                imageUploadContainer.style.backgroundColor = '';
-            }
-        });
-
-        imageUploadContainer.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleImageFile(files[0]);
-            }
-        });
-
-        imageInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleImageFile(e.target.files[0]);
-            }
-        });
-
-        removeImageBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            clearImage();
-        });
-
-        function handleImageFile(file) {
-            if (!file.type.startsWith('image/')) {
-                showMessage('Please select a valid image file.', 'error');
-                return;
-            }
-
-            if (file.size > 5 * 1024 * 1024) {
-                showMessage('Image must be less than 5MB.', 'error');
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                selectedImageBase64 = e.target.result;
-                imagePreview.src = selectedImageBase64;
-                imagePreview.classList.add('visible');
-                imageUploadContainer.classList.add('has-image');
-                imageUploadContainer.querySelector('.upload-icon').style.display = 'none';
-                imageUploadContainer.querySelector('.upload-text').style.display = 'none';
-                imageUploadContainer.querySelector('.upload-hint').style.display = 'none';
-                removeImageBtn.style.display = 'inline-block';
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function clearImage() {
-            selectedImageBase64 = null;
-            imageInput.value = '';
-            imagePreview.src = '';
-            imagePreview.classList.remove('visible');
-            imageUploadContainer.classList.remove('has-image');
-            imageUploadContainer.querySelector('.upload-icon').style.display = '';
-            imageUploadContainer.querySelector('.upload-text').style.display = '';
-            imageUploadContainer.querySelector('.upload-hint').style.display = '';
-            removeImageBtn.style.display = 'none';
-            imageUploadContainer.style.borderColor = '#e0e0e0';
-            imageUploadContainer.style.backgroundColor = '';
-        }
-
-        // Basic form submission
-        basicForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const text = basicText.value.trim();
-            
-            if (!text) {
-                showMessage('Please enter some text.', 'error');
-                return;
-            }
-            
-            basicSubmitBtn.disabled = true;
-            basicSubmitBtn.innerHTML = '<span class="loading"></span>Printing...';
-            
-            try {
-                const response = await fetch(`${API_URL}/print`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        type: 'text',
-                        content: text
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showMessage(data.message || 'Printed successfully! ✓', 'success');
-                    basicForm.reset();
-                } else {
-                    showMessage(`Error: ${data.error || 'Unknown error'}`, 'error');
-                }
-            } catch (error) {
-                showMessage(`Could not connect to printer. ${error.message}`, 'error');
-            } finally {
-                basicSubmitBtn.disabled = false;
-                basicSubmitBtn.innerHTML = 'Print';
-            }
-        });
-
-        // Image form submission
-        imageForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            if (!selectedImageBase64) {
-                showMessage('Please select an image.', 'error');
-                return;
-            }
-            
-            imageSubmitBtn.disabled = true;
-            imageSubmitBtn.innerHTML = '<span class="loading"></span>Printing...';
-            
-            try {
-                const response = await fetch(`${API_URL}/print`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        type: 'image',
-                        content: selectedImageBase64
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showMessage(data.message || 'Printed successfully! ✓', 'success');
-                    clearImage();
-                } else {
-                    showMessage(`Error: ${data.error || 'Unknown error'}`, 'error');
-                }
-            } catch (error) {
-                showMessage(`Could not connect to printer. ${error.message}`, 'error');
-            } finally {
-                imageSubmitBtn.disabled = false;
-                imageSubmitBtn.innerHTML = 'Print';
-            }
-        });
-        
-        function showMessage(text, type) {
-            messageDiv.innerHTML = text;
-            messageDiv.className = 'message ' + type;
-            
-            if (type === 'success') {
-                setTimeout(() => {
-                    messageDiv.style.display = 'none';
-                }, 5000);
-            }
-        }
-
-        function hideMessage() {
-            messageDiv.className = 'message';
-            messageDiv.style.display = 'none';
-        }
-
-        // Vocab functionality
-        
-        // Convert IPA phonetics to ASCII-friendly representation for thermal printers
-        function ipaToAscii(ipa) {
-            if (!ipa) return '';
-            const conversions = {
-                'ˈ': "'", 'ˌ': ',', 'ː': ':', 'ʰ': 'h',
-                'ə': 'uh', 'ɜ': 'er', 'ɐ': 'a', 'ʌ': 'u',
-                'æ': 'a', 'ɑ': 'ah', 'ɒ': 'o', 'ɔ': 'aw',
-                'ɛ': 'e', 'ɪ': 'i', 'ʊ': 'oo', 'ʉ': 'oo',
-                'i': 'ee', 'u': 'oo', 'e': 'ay', 'o': 'oh',
-                'ɹ': 'r', 'ɾ': 'r', 'ɽ': 'r', 'ʁ': 'r',
-                'ŋ': 'ng', 'ɲ': 'ny', 'ɳ': 'n',
-                'θ': 'th', 'ð': 'th', 'ʃ': 'sh', 'ʒ': 'zh',
-                'tʃ': 'ch', 'dʒ': 'j', 'ʔ': "'",
-                'j': 'y', 'ɫ': 'l', 'ɬ': 'l',
-                'β': 'b', 'ɸ': 'f', 'χ': 'kh', 'ɣ': 'g',
-                'ʍ': 'wh', 'ʋ': 'v', 'ɥ': 'y'
-            };
-            
-            let result = ipa;
-            // Handle multi-character sequences first
-            result = result.replace(/tʃ/g, 'ch').replace(/dʒ/g, 'j');
-            // Then single characters
-            for (const [from, to] of Object.entries(conversions)) {
-                result = result.split(from).join(to);
-            }
-            return result;
-        }
-
-        const vocabWords = [
-            'ephemeral', 'serendipity', 'eloquent', 'ubiquitous', 'pragmatic',
-            'resilient', 'meticulous', 'candid', 'diligent', 'empathy',
-            'ambiguous', 'benevolent', 'capricious', 'deferential', 'ebullient',
-            'fastidious', 'gregarious', 'hackneyed', 'iconoclast', 'juxtapose',
-            'kinetic', 'lucid', 'malleable', 'nonchalant', 'obstinate',
-            'penchant', 'quintessential', 'reticent', 'sanguine', 'tenacious',
-            'verbose', 'whimsical', 'zealous', 'aesthetic', 'brevity',
-            'cogent', 'disparate', 'exacerbate', 'fortuitous', 'gratuitous',
-            'hyperbole', 'innate', 'jovial', 'keen', 'lethargic',
-            'mundane', 'nuance', 'ostentatious', 'paradox', 'querulous'
-        ];
-
-        let currentVocabData = null;
-
-        function getDailyWord() {
-            const now = new Date();
-            const start = new Date(now.getFullYear(), 0, 0);
-            const diff = now - start;
-            const oneDay = 1000 * 60 * 60 * 24;
-            const dayOfYear = Math.floor(diff / oneDay);
-            return vocabWords[dayOfYear % vocabWords.length];
-        }
-
-        async function loadVocabWord() {
-            const vocabLoading = document.getElementById('vocabLoading');
-            const vocabContent = document.getElementById('vocabContent');
-            const vocabError = document.getElementById('vocabError');
-            
-            vocabLoading.style.display = 'flex';
-            vocabContent.style.display = 'none';
-            vocabError.style.display = 'none';
-
-            const word = getDailyWord();
-
-            try {
-                const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
-                if (!response.ok) throw new Error('Word not found');
-                
-                const data = await response.json();
-                const entry = data[0];
-                const meaning = entry.meanings[0];
-                const definition = meaning.definitions[0];
-
-                currentVocabData = {
-                    word: entry.word,
-                    phonetic: entry.phonetic || (entry.phonetics && entry.phonetics[0]?.text) || '',
-                    partOfSpeech: meaning.partOfSpeech,
-                    definition: definition.definition,
-                    example: definition.example || ''
-                };
-
-                document.getElementById('vocabWord').textContent = currentVocabData.word;
-                document.getElementById('vocabPhonetic').textContent = currentVocabData.phonetic;
-                document.getElementById('vocabPos').textContent = currentVocabData.partOfSpeech;
-                document.getElementById('vocabDefinition').textContent = currentVocabData.definition;
-                document.getElementById('vocabExample').textContent = currentVocabData.example ? `"${currentVocabData.example}"` : '';
-
-                vocabLoading.style.display = 'none';
-                vocabContent.style.display = 'block';
-            } catch (error) {
-                console.error('Failed to load vocab:', error);
-                vocabLoading.style.display = 'none';
-                vocabError.style.display = 'block';
-            }
-        }
-
-        // Vocab form submission
-        const vocabSubmitBtn = document.getElementById('vocabSubmitBtn');
-        vocabSubmitBtn.addEventListener('click', async () => {
-            if (!currentVocabData) {
-                showMessage('Vocabulary word not loaded yet.', 'error');
-                return;
-            }
-
-            vocabSubmitBtn.disabled = true;
-            vocabSubmitBtn.innerHTML = '<span class="loading"></span>Printing...';
-
-            // Format vocab for printing (convert phonetic to ASCII for thermal printer)
-            let vocabText = `${currentVocabData.word.toUpperCase()}`;
-            if (currentVocabData.phonetic) {
-                vocabText += `\n${ipaToAscii(currentVocabData.phonetic)}`;
-            }
-            vocabText += `\n\n[${currentVocabData.partOfSpeech}]`;
-            vocabText += `\n\n${currentVocabData.definition}`;
-            if (currentVocabData.example) {
-                vocabText += `\n\nExample: "${currentVocabData.example}"`;
-            }
-
-            try {
-                const response = await fetch(`${API_URL}/print`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        type: 'text',
-                        content: vocabText
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showMessage(data.message || 'Printed successfully! ✓', 'success');
-                } else {
-                    showMessage(`Error: ${data.error || 'Unknown error'}`, 'error');
-                }
-            } catch (error) {
-                showMessage(`Could not connect to printer. ${error.message}`, 'error');
-            } finally {
-                vocabSubmitBtn.disabled = false;
-                vocabSubmitBtn.innerHTML = 'Print';
-            }
-        });
-
-        // Load vocab when switching to vocab tab
-        tabBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                if (btn.dataset.tab === 'vocab' && !currentVocabData) {
-                    loadVocabWord();
-                }
-            });
-        });
-    </script>
+        <p class="sr-only" id="liveStatus" role="status" aria-live="polite"></p>
+        <noscript><p class="noscript">Enable JavaScript to message Samson.</p></noscript>
+    </main>
 </body>
 </html>

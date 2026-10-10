@@ -38,8 +38,11 @@ Desktop.ini
 *.log
 .env
 .env.local
+.remote-access/
 ngrok
 cloudflared
+models/
+data/
 *.tar.gz
 
 # Backup files

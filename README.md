@@ -29,7 +29,7 @@ This application provides a complete solution for collecting and printing ticket
 - **Web Interface**: A clean, responsive frontend that can be hosted on Netlify or run locally
 - **Backend API**: A Flask-based API running on Raspberry Pi that handles printer communication
 - **Multiple Printer Support**: Works with USB, Serial, Network, and Bluetooth-connected printers
-- **Optional Database Logging**: Integrate with Convex to log all submitted tickets
+- **Print History**: Automatically save tickets on the server and show them when the website opens
 - **Spam Protection**: Built-in reCAPTCHA integration
 
 The system is designed to be flexible and easy to deploy. You can run everything on a single Raspberry Pi, or separate the frontend (hosted on Netlify) from the backend (on your Pi) for remote access.
@@ -39,11 +39,54 @@ The system is designed to be flexible and easy to deploy. You can run everything
 - 📝 Simple web interface for ticket submission
 - 🖨️ Automatic printing on Netum 58mm thermal printer
 - ⏰ Timestamp and date stamping
-- 💾 Logged submissions (optional Convex database integration)
+- 💾 Persistent print history with text, timestamps, and ticket previews
 - 🌐 Accessible from any device on your network
 - 🔒 Built-in reCAPTCHA spam protection
 
 ## Quick Start
+
+Sending a chat message clears the composer immediately, so you can send the next
+message while Samson prints. Each sent message, photo, meme, or vocab word appears
+on your side of the conversation, followed directly by Samson’s ticket preview.
+Messages print in the order sent; keep the page open until queued messages finish.
+Unconfirmed messages stay visible with their error directly underneath.
+
+Open Samson’s settings and choose **Message spacing** to set the extra blank
+paper after sent text or photo messages: **S** (0 lines), **M** (3 lines, default),
+or **L** (10 lines). This
+preference is saved in your browser for each server and applies when you send
+each message. Ticket previews and saved history show the same spacing.
+
+The **Font** selector offers Monospace (the original font), Sans, and Serif.
+**Font size** offers S, M (the original size), and L. These settings are also
+saved per browser and server, and apply to sent messages and photo captions.
+Long text wraps to fit the paper; ticket previews and history preserve the
+printed font and size. Additional fonts and their license are bundled in `fonts/`.
+
+The website loads saved print history automatically when opened, including chat
+tickets, photos, and **Listen & print** output. Use **Load older tickets** to browse
+earlier prints and **View ticket** to see the saved paper preview. Failed attempts
+and test previews have separate labels. Opening history never reprints a ticket.
+
+History is stored by `app.py` in `data/print-history.sqlite3` on the server, so it
+survives browser refreshes and app/Pi restarts and is shared across devices. Keep
+that file when deploying or backing up the app. Set `PRINT_HISTORY_PATH` to use a
+different persistent location. `/history?before=ID&limit=30` provides paginated
+history (maximum 100 entries per request); the existing remote password protects
+it. History starts with this update; earlier prints cannot be reconstructed.
+The legacy standalone `backend/api.py` does not provide this feature.
+
+To use Samson from cellular or another Wi-Fi network, see
+[password-protected remote access](REMOTE_ACCESS.md). Run the website and API on
+the Pi behind an HTTPS tunnel; the Pi stays online beside the printer.
+
+For the Samson USB microphone → review text → print workflow, see
+[MICROPHONE_SETUP.md](MICROPHONE_SETUP.md). It runs speech recognition locally on
+the Pi and uses the root `app.py` application.
+
+For continuous listening, choose **+ → Listen & print** in the chat. Set the print
+cadence and optional duration, then use **Stop** in the listening bar to turn it
+off. See [LIVE_PRINT_API.md](LIVE_PRINT_API.md) for the API and recovery behavior.
 
 Want to get started quickly? See [QUICK_START.md](QUICK_START.md) for a step-by-step guide to deploy the application.
 
@@ -66,8 +109,8 @@ Before starting, you'll need to configure the following:
 ### Optional Configuration
 
 3. **Convex Database** (Optional) - Set `CONVEX_DEPLOYMENT` in Netlify environment variables
-   - Only needed if you want to log tickets to a database
-   - If not configured, tickets will still print but won't be logged
+   - Only needed for the legacy Netlify submission integration
+   - The current `app.py` website saves print history locally without Convex
 
 See `env.example` for all available environment variables.
 
@@ -187,11 +230,47 @@ sudo systemctl status ticket-printer
 
 ## Usage
 
-1. Open a web browser and navigate to `http://[YOUR_PI_IP]:5000`
-2. Enter your name (optional)
-3. Enter your question or comment
-4. Click "Print Ticket"
-5. The ticket will automatically print with the specified format
+1. Run the root `app.py` and open `http://[YOUR_PI_IP]:5000`.
+2. Type in **Message Samson** and click the blue send arrow. On desktop, Enter sends;
+   Shift+Enter adds a new line.
+3. Use **+** to add a **Photo**, **Vocab Word**, or **Random Meme**. Vocab Word adds
+   a random word and its definition; Random Meme attaches a random meme image.
+   Vocab Word includes backup definitions for offline use; Random Meme needs an
+   internet connection. Both let you review the draft before sending. Image
+   previews and optional captions share the message box and print together as one
+   ticket. You can also drop or paste an image into the box.
+4. Use the microphone button to record on the Pi. Review the transcript in the
+   message box, then send it. See [microphone setup](MICROPHONE_SETUP.md).
+5. Watch the conversation for print confirmations. Failed requests keep your
+   draft; check the printer before resending if a response was lost.
+
+The page supports light and dark mode and phone screens. The profile dot turns
+green only when a printer is available and test mode is off. The microphone
+button’s tooltip shows its availability.
+Conversation history stays in the current page and resets when you reload.
+
+Click **Samson** at the top to open settings and connection info for the Pi,
+microphone, and printer. **Include date** adds the date and time to printed tickets;
+it defaults to on and is remembered in this browser. Changes apply to new chat
+tickets (including photos) and newly started Listen & print sessions.
+Connection info identifies the server as a Raspberry Pi only when its hardware
+reports that identity. A local Mac or another computer is labeled as a server,
+with its address, printer connection type, and a reason if printing needs setup.
+**Check again** refreshes these checks without printing. To use the printer on
+your Pi, open Samson at the Pi’s address or configure the frontend’s API URL.
+
+To preview without using paper, run `TEST_MODE=true python app.py`. The chat labels
+these messages as logged in test mode and shows the same ticket preview. The
+tilted, torn-paper card contains the actual black-and-white bitmap sent to the
+printer, including the Pi's timestamp, complete wrapped text, and processed photo.
+Chat tickets are rendered once on the Pi and sent as raster graphics on every
+printer connection; long messages are split into bands without shrinking or
+truncating them. Raster text can take longer to transfer over BLE than native text.
+`IMAGE_MAX_WIDTH` sets the printable dot width (384 by default); the image height,
+contrast, and dithering settings apply to attached photos, not the whole ticket.
+Physical paper margins, tear position, and ink density depend on the printer.
+A separate static deployment should publish
+the complete `frontend/` directory, including `chat.css` and `chat.js`.
 
 ## Ticket Format
 
@@ -253,6 +332,12 @@ sudo journalctl -u ticket-printer -f
 ## API Endpoints
 
 - `GET /` - Web interface
+- `POST /print` - Print a chat message: `{"type":"text","content":"Hello Pi"}`,
+  or a photo: `{"type":"image","content":"data:image/png;base64,...","caption":"Optional message"}`.
+  Messages and captions support up to 1,000 characters.
+  Successful responses include `test_mode` and `preview` with a PNG data URL in
+  `image`, pixel `width`/`height`, and the full formatted `text` for accessibility.
+  Update the Pi backend and frontend together to enable the matching previews.
 - `POST /submit_ticket` - Submit a ticket to print
   - Body: `{"from_name": "John Doe", "question": "Your question here"}`
 - `GET /health` - Health check endpoint
@@ -274,7 +359,12 @@ This application supports multiple deployment configurations:
 - Run `app.py` directly on the Raspberry Pi
 - Access via local network: `http://[PI_IP]:5000`
 
-### Frontend on Netlify + Backend on Raspberry Pi (Recommended)
+### Password-protected remote access (Recommended)
+- Run `python serve_remote.py --tunnel` on the Pi after configuring its password.
+- Open the generated HTTPS link on any network and sign in as `samson`.
+- See [REMOTE_ACCESS.md](REMOTE_ACCESS.md) for setup and a persistent URL.
+
+### Separate frontend on Netlify (Legacy)
 - Frontend: Deploy `frontend/` folder to Netlify
 - Backend: Run `backend/api.py` on Raspberry Pi
 - Expose backend via ngrok or Cloudflare Tunnel

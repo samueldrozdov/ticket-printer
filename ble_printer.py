@@ -45,6 +45,11 @@ def _escpos_frame(text: str) -> bytes:
 
 
 def _image_to_escpos_raster(image: Image.Image, max_width: int = None, max_height: int = None, use_dithering: bool = None, contrast: float = None) -> bytes:
+    image = prepare_thermal_image(image, max_width, max_height, use_dithering, contrast)
+    return encode_raster(image)
+
+
+def prepare_thermal_image(image: Image.Image, max_width: int = None, max_height: int = None, use_dithering: bool = None, contrast: float = None) -> Image.Image:
     """
     Convert PIL Image to ESC/POS raster bitmap format (GS v 0 command).
     
@@ -68,8 +73,8 @@ def _image_to_escpos_raster(image: Image.Image, max_width: int = None, max_heigh
     # Resize if needed (maintain aspect ratio)
     if image.width > max_width or image.height > max_height:
         ratio = min(max_width / image.width, max_height / image.height)
-        new_width = int(image.width * ratio)
-        new_height = int(image.height * ratio)
+        new_width = max(1, int(image.width * ratio))
+        new_height = max(1, int(image.height * ratio))
         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     
     # Convert to grayscale first for better processing
@@ -89,6 +94,18 @@ def _image_to_escpos_raster(image: Image.Image, max_width: int = None, max_heigh
         # Simple threshold - faster but loses detail
         image = image.convert('1', dither=Image.Dither.NONE)
     
+    return image
+
+
+def encode_raster(image: Image.Image) -> bytes:
+    """Encode prepared pixels without resizing, contrast changes, or dithering."""
+    if image.mode != '1':
+        raise ValueError("Raster must be a prepared monochrome image")
+    # White padding prevents black marks in the unused bits of the last byte.
+    if image.width % 8:
+        padded = Image.new('1', ((image.width + 7) // 8 * 8, image.height), 1)
+        padded.paste(image)
+        image = padded
     width = image.width
     height = image.height
     
@@ -221,6 +238,11 @@ def ble_print_image(addr: str, image: Image.Image):
     asyncio.run(_ble_write(addr, payload, BLE_IMAGE_CHUNK_SIZE, BLE_IMAGE_WRITE_GAP_SEC))
 
 
+def ble_print_raster_ticket(addr: str, payload: bytes):
+    """Send an already rendered ticket without changing its pixels."""
+    asyncio.run(_ble_write(addr, payload, BLE_IMAGE_CHUNK_SIZE, BLE_IMAGE_WRITE_GAP_SEC))
+
+
 def ble_print_text_with_image(addr: str, text: str, image: Optional[Image.Image] = None):
     """Print text with optional image via BLE."""
     # Initialize printer
@@ -251,4 +273,3 @@ def ble_is_available(addr: str) -> bool:
         return device is not None
 
     return asyncio.run(_check())
-

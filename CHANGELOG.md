@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Isolate printer operations from web workers, bound print and connection-check
+  waits, and report busy or stalled hardware without blocking the website.
+- Keep each ticket preview or print error directly below its sender’s message,
+  including photos, random memes, and vocab words, when multiple sends are queued.
+- Clear the composer immediately on Send and queue messages in order, so users
+  can send back to back without waiting for printing or losing their next draft.
+- Replaced browser password popups with a mobile-friendly sign-in page and
+  signed sessions, so stale browser credentials no longer cause a login loop.
+- Kept the tilted, torn-paper ticket card and replaced its placeholder content
+  with the exact raster sent to the printer, including full text, timestamps,
+  and processed photos. Test mode now shows the same preview without printing.
+- Named the chat contact Samson and added a portrait avatar.
+- Replaced the tabbed form with a responsive conversation with Samson, including
+  print confirmations, inline photo attachments, and recording in the composer.
+- Added optional image captions to `/print` so a photo and message share one ticket.
+- Exposed frontend assets through Flask and made test-mode confirmations explicit.
+
 ### Added
+- Added password-protected remote access, a single-process server for HTTPS
+  tunnels, and a command to create a temporary Cloudflare link from the Pi.
+- Added **Listen & print** to the plus menu with custom print cadence, timed or
+  indefinite listening, status recovery after refresh, and manual Stop.
 - Initial open source release
 - Web-based ticket submission interface
 - Support for USB, Serial, Network, and Bluetooth printer connections
@@ -56,4 +78,3 @@ Initial release of the Ticket Printer Application. Supports basic ticket printin
 ---
 
 **Note**: Future releases will be documented here with specific version numbers and dates.
-
