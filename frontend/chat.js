@@ -359,7 +359,7 @@
             `${count} ${session.test_mode ? 'logged in test mode' : 'printed'}`
         ].join(' · ') : 'Connecting to Samson…';
         byId('listeningDetails').textContent = summary;
-        const warning = state.error || session?.error || '';
+        const warning = state.error || session?.error || session?.warning || '';
         byId('listeningWarning').textContent = warning;
         byId('listeningWarning').hidden = !warning;
         byId('stopListening').disabled = state.stopRequested || !state.busy;
@@ -431,7 +431,8 @@
             const ended = data.stop_reason === 'duration' ? 'Listening finished.' : 'Listening stopped.';
             const text = data.text ? ' I kept the unprinted words in your draft.' : '';
             const cancelled = data.cancelled_count ? ` ${data.cancelled_count} queued ${data.cancelled_count === 1 ? 'ticket was' : 'tickets were'} cancelled.` : '';
-            message.append(element('div', 'bubble', ended + text + cancelled));
+            const warning = data.warning ? ` ${data.warning}` : '';
+            message.append(element('div', 'bubble', ended + text + cancelled + warning));
             track.append(message);
             scrollToLatest();
             announce(ended);
@@ -479,6 +480,7 @@
         partialTranscript.hidden = true;
         updateComposer();
         if (data.error) showError(data.error);
+        else if (data.warning) showError(data.warning);
         else if (!text) showError('No speech detected. Move closer to Samson’s microphone and try again.');
         else announce('Recording finished. Review your message, then send it to Samson.');
         if (input.value.length > input.maxLength) {

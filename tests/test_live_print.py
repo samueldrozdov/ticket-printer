@@ -255,6 +255,20 @@ class LiveRecordingTests(unittest.TestCase):
         self.assertEqual(self.result()['printed_count'], 0)
         self.print_text.assert_not_called()
 
+    def test_input_overflow_continues_live_printing_without_replaying_a_ticket(self):
+        self.start(cadence_seconds=1)
+        self.send(b'partial:first ticket')
+        wait_until(lambda: self.mic.live_status()['printed_count'] == 1)
+        self.capture(b'partial:second ticket', 8000, None, SimpleNamespace(input_overflow=True))
+        wait_until(lambda: self.mic.live_status()['printed_count'] == 2)
+        status = self.mic.live_status()
+        self.assertEqual(status['state'], 'recording')
+        self.assertEqual(status['audio_overflows'], 1)
+        self.assertIn('Some audio was missed', status['warning'])
+        self.mic.stop(self.session['id'])
+        self.assertEqual(self.result()['state'], 'done')
+        self.assertEqual(self.print_text.call_args_list, [call('first ticket'), call('second ticket')])
+
     def test_printer_failure_stops_audio_and_reports_failed_text(self):
         self.print_text.side_effect = RuntimeError('No paper')
         self.start(cadence_seconds=1)

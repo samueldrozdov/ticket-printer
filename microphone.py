@@ -1,6 +1,7 @@
 """On-demand and continuous recording from the USB microphone on the printer host."""
 
 import json
+import logging
 import os
 from pathlib import Path
 import queue
@@ -17,6 +18,10 @@ MAX_SECONDS = 30
 DEFAULT_CADENCE_SECONDS = 10
 MAX_CADENCE_SECONDS = 300
 MAX_DURATION_SECONDS = 86400
+AUDIO_QUEUE_BLOCKS = 64
+AUDIO_GAP_WARNING = "Some audio was missed. Check the transcript and printed tickets for missing words."
+logger = logging.getLogger(__name__)
+
 
 
 class MicrophoneError(Exception):
@@ -61,6 +66,7 @@ class Microphone:
                 raise MicrophoneError("The Pi microphone is already in use. Try again when recording finishes.", 409)
             session_id = secrets.token_urlsafe(24)
             session = {"id": session_id, "state": "starting", "text": "", "error": None,
+                       "warning": None, "audio_overflows": 0,
                        "started_at": None, "ended_at": None, "stop": threading.Event(),
                        "mode": "live" if cadence_seconds is not None else "review",
                        "cadence_seconds": cadence_seconds, "duration_seconds": duration_seconds,
@@ -86,7 +92,8 @@ class Microphone:
             limit = session["duration_seconds"] if session["mode"] == "live" else MAX_SECONDS
             elapsed = max(0, (session["ended_at"] or time.monotonic()) - session["started_at"]) \
                 if session["started_at"] is not None else 0
-            result = {key: session[key] for key in ("id", "state", "mode", "text", "error", "stop_reason")}
+            result = {key: session[key] for key in (
+                "id", "state", "mode", "text", "error", "warning", "audio_overflows", "stop_reason")}
             result.update(max_seconds=limit, seconds=int(min(limit, elapsed) if limit is not None else elapsed))
             if session["mode"] == "live":
                 result.update(cadence_seconds=session["cadence_seconds"], duration_seconds=limit,
@@ -135,6 +142,22 @@ class Microphone:
     def _record(self, session):
         timer = None
         live = session.get("live")
+        overflows = 0
+        failure_reason = None
+
+        def report_overflows():
+            if overflows != session["audio_overflows"]:
+                if not session["audio_overflows"]:
+                    logger.warning("Microphone input overflow; continuing capture with an audio-gap warning")
+                self._update(session, audio_overflows=overflows, warning=AUDIO_GAP_WARNING)
+
+        def capture_error():
+            if failure_reason == "queue_full":
+                return MicrophoneError("Samson could not transcribe audio fast enough. Recording stopped; try again.")
+            if failure_reason == "audio_status":
+                return MicrophoneError("The microphone reported an audio error. Please try recording again.")
+            return MicrophoneError("The microphone stopped sending audio. Check its USB connection and try again.")
+
         try:
             try:
                 import sounddevice as sd
@@ -162,7 +185,7 @@ class Microphone:
                 self._update(session, state="done")
                 return
             recognizer = KaldiRecognizer(self._model, sample_rate)
-            audio = queue.Queue(maxsize=64)
+            audio = queue.Queue(maxsize=AUDIO_QUEUE_BLOCKS)
             failed = threading.Event()
             stop = session["stop"]
             segments = []
@@ -170,14 +193,26 @@ class Microphone:
             cadence_frames = session["cadence_seconds"] * sample_rate if live else None
 
             def capture(indata, frames, timing, status):
+                nonlocal overflows, failure_reason
                 if stop.is_set():
                     raise sd.CallbackStop
                 if status:
-                    failed.set()
-                    raise sd.CallbackAbort
+                    # PortAudio keeps delivering usable input after an overflow.
+                    # Do not turn a recoverable scheduling gap into a USB failure.
+                    # Keep logging and session-lock work out of the audio callback.
+                    if getattr(status, "input_overflow", False) and not any(
+                        getattr(status, flag, False) for flag in (
+                            "input_underflow", "output_underflow", "output_overflow", "priming_output")
+                    ):
+                        overflows += 1
+                    else:
+                        failure_reason = "audio_status"
+                        failed.set()
+                        raise sd.CallbackAbort
                 try:
                     audio.put_nowait((bytes(indata), frames))
                 except queue.Full:
+                    failure_reason = "queue_full"
                     failed.set()
                     raise sd.CallbackAbort
 
@@ -228,15 +263,16 @@ class Microphone:
                     timer.daemon = True
                     timer.start()
                 while not stop.is_set():
+                    report_overflows()
                     if failed.is_set() or (not stream.active and not stop.is_set()):
-                        raise MicrophoneError("Microphone recording was interrupted. Check its USB connection and try again.")
+                        raise capture_error()
                     try:
                         consume(audio.get(timeout=0.2))
                     except queue.Empty:
                         continue
             self._update(session, state="stopping" if live else "transcribing", ended_at=time.monotonic())
             if failed.is_set():
-                raise MicrophoneError("Audio was interrupted. Please try recording again.")
+                raise capture_error()
             while not audio.empty():
                 consume(audio.get_nowait())
             if not live or window_frames:
@@ -244,6 +280,7 @@ class Microphone:
             if not live:
                 self._update(session, state="done")
         except Exception as exc:
+            logger.warning("Microphone session stopped: %s", failure_reason or type(exc).__name__)
             message = str(exc) if isinstance(exc, (MicrophoneError, LivePrintError)) else (
                 "Could not record or transcribe. Check the microphone, speech model, and Pi audio permissions."
             )
@@ -251,6 +288,7 @@ class Microphone:
             if live:
                 live.cancel()
         finally:
+            report_overflows()
             if timer:
                 timer.cancel()
             self._update(session, ended_at=session["ended_at"] or time.monotonic())

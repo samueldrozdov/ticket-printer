@@ -121,6 +121,11 @@ printer. Restart without `TEST_MODE=true` for physical printing.
 
 ## Troubleshooting
 
+- **Some audio was missed:** the microphone reported an input-buffer overflow.
+  Recording continues, with a warning to check for missing words. This does not
+  mean the USB microphone disconnected. The app logs the overflow without saving
+  audio or transcript content. If recognition itself cannot keep up and fills
+  the bounded audio queue, recording stops with a separate overload message.
 - **Microphone is not enabled:** set `MICROPHONE_ENABLED=true` and restart the app,
   then reload the page.
 - **No input device / cannot open microphone:** check the USB cable, run

@@ -44,6 +44,13 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
                 siblings.splice(siblings.indexOf(this) + 1, 0, child);
             },
             focus() { document.activeElement = this; },
+            querySelector(selector) {
+                return this.children.find(child => child.className.split(' ').includes(selector.slice(1))) || null;
+            },
+            remove() {
+                if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1);
+                this.parentNode = null;
+            },
             requestSubmit() { this.events.submit({ preventDefault() {} }); }
         };
     }
@@ -107,6 +114,25 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
         }
     };
 }
+
+test('audio-gap warnings keep live listening active and remain visible after stopping', async () => {
+    let state = 'recording';
+    const warning = 'Some audio was missed. Check the transcript and printed tickets for missing words.';
+    const f = await fixture({ liveFetch: async () => ({ ok: true, json: async () => ({
+        id: 'overflow-session', state, seconds: 5, cadence_seconds: 10, printed_count: 0,
+        warning, text: '', printing: null, stop_reason: state === 'done' ? 'manual' : null
+    }) }) });
+    assert.equal(f.byId('listeningWarning').textContent, warning);
+    assert.equal(f.byId('listeningWarning').hidden, false);
+    assert.equal(f.byId('listeningLabel').textContent, 'Listening');
+    assert.equal(f.byId('stopListening').disabled, false);
+    state = 'done';
+    await f.listener.refresh();
+    assert.equal(f.byId('listeningBar').hidden, true);
+    assert.match(f.byId('messageTrack').children.at(-1).children[0].textContent,
+        /Listening stopped.*Some audio was missed/);
+    assert.equal(f.requests.length, 0);
+});
 
 test('an HTML gateway timeout preserves the message without blaming the API address or retrying', async () => {
     const f = await fixture();

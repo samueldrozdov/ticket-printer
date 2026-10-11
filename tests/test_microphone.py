@@ -19,6 +19,7 @@ class RecordingTests(unittest.TestCase):
         self.closed = threading.Event()
         self.chunks = [b'first', b'partial']
         self.audio_status = False
+        self.stream_active = True
         test = self
 
         class Stream:
@@ -28,6 +29,7 @@ class RecordingTests(unittest.TestCase):
                 self.callback = kwargs['callback']
 
             def __enter__(self):
+                self.active = test.stream_active
                 test.opened.set()
                 for chunk in test.chunks:
                     try:
@@ -121,9 +123,44 @@ class RecordingTests(unittest.TestCase):
         result = self.result(self.mic.start())
         self.assertEqual(result['state'], 'error')
         self.assertTrue(self.closed.is_set())
+        self.assertIn('audio error', result['error'])
+        self.assertNotIn('USB', result['error'])
         self.audio_status = False
         with patch('microphone.MAX_SECONDS', 0.03):
             self.assertEqual(self.result(self.mic.start())['state'], 'done')
+
+    def test_input_overflow_keeps_capturing_and_reports_missing_audio(self):
+        self.audio_status = SimpleNamespace(input_overflow=True)
+        with patch('microphone.MAX_SECONDS', 0.03):
+            result = self.result(self.mic.start())
+        self.assertEqual(result['state'], 'done')
+        self.assertIsNone(result['error'])
+        self.assertEqual(result['text'], 'hello printer')
+        self.assertEqual(result['audio_overflows'], 2)
+        self.assertIn('Some audio was missed', result['warning'])
+        self.assertTrue(self.closed.is_set())
+
+    def test_audio_queue_overload_is_not_reported_as_a_usb_failure(self):
+        with patch('microphone.AUDIO_QUEUE_BLOCKS', 1):
+            result = self.result(self.mic.start())
+        self.assertEqual(result['state'], 'error')
+        self.assertIn('transcribe audio fast enough', result['error'])
+        self.assertNotIn('USB', result['error'])
+        self.assertTrue(self.closed.is_set())
+
+    def test_stopped_stream_still_reports_a_connection_problem(self):
+        self.stream_active = False
+        self.chunks = []
+        result = self.result(self.mic.start())
+        self.assertEqual(result['state'], 'error')
+        self.assertIn('stopped sending audio', result['error'])
+        self.assertTrue(self.closed.is_set())
+
+    def test_input_overflow_does_not_mask_another_audio_failure(self):
+        self.audio_status = SimpleNamespace(input_overflow=True, input_underflow=True)
+        result = self.result(self.mic.start())
+        self.assertEqual(result['state'], 'error')
+        self.assertIn('audio error', result['error'])
 
     def test_missing_device_does_not_open_stream(self):
         self.sd.query_devices.side_effect = ValueError('No matching device')
