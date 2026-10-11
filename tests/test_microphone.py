@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from flask import Flask
 
 from microphone import Microphone, MicrophoneError, create_microphone_blueprint
+from print_history import PrintHistory
 
 
 class RecordingTests(unittest.TestCase):
@@ -257,7 +258,9 @@ class ApiTests(unittest.TestCase):
         import app as printer_app
 
         client = printer_app.app.test_client()
-        with patch.object(Microphone, 'start', return_value={
+        with tempfile.TemporaryDirectory() as history_dir, \
+                patch.object(printer_app, 'print_history', PrintHistory(history_dir + '/history.sqlite3')), \
+                patch.object(Microphone, 'start', return_value={
             'id': 'test', 'state': 'done', 'text': 'hello printer', 'error': None
         }), patch.object(printer_app, 'PRINTER_TYPE', 'ble'), \
                 patch.object(printer_app, 'BLE_PRINTER_ADDR', 'test-printer'), \
