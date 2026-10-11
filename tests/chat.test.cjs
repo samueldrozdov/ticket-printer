@@ -3,12 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { LiveListening } = require('../frontend/live-listening.js');
+const { AudioMeter } = require('../frontend/audio-meter.js');
 
 const source = fs.readFileSync(require.resolve('../frontend/chat.js'), 'utf8');
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null } = {}) {
-    const nodes = new Map(), requests = [];
+async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null, microphoneEnabled = false } = {}) {
+    const nodes = new Map(), requests = [], audioPolls = [];
     let listener;
     const document = {
         activeElement: null,
@@ -21,6 +22,7 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
     function node() {
         const classes = new Set();
         return {
+            ownerDocument: document,
             value: '', textContent: '', className: '', hidden: false, disabled: false,
             maxLength: 1000, scrollHeight: 25, clientHeight: 800, offsetHeight: 80,
             style: {}, dataset: {}, children: [], events: {},
@@ -37,6 +39,11 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
             append(...children) {
                 children.forEach(child => { child.parentNode = this; });
                 this.children.push(...children);
+            },
+            querySelector(selector) { return this.children.find(child => child.className.split(' ').includes(selector.slice(1))); },
+            remove() {
+                if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1);
+                this.parentNode = null;
             },
             after(child) {
                 child.parentNode = this.parentNode;
@@ -64,6 +71,9 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
         document, AbortController,
         window: {
             PRINTER_API_URL: 'http://samson.test', SamsonSettings: settings,
+            AudioMeter: class extends AudioMeter {
+                constructor(root) { super(root, { schedule: () => 1, cancel() {} }); }
+            },
             LiveListening: class {
                 constructor(options) {
                     if (liveFetch) return listener = new LiveListening({ ...options, schedule: () => 1, cancel() {} });
@@ -73,7 +83,11 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
             addEventListener() {}, matchMedia: () => ({ matches: true })
         },
         sessionStorage: { getItem() { return rememberedId; }, setItem() {}, removeItem() {} },
-        setTimeout: (callback, delay) => { if (delay === 500) setImmediate(callback); return 1; }, clearTimeout() {},
+        setTimeout: (callback, delay) => {
+            if (delay === 500) setImmediate(callback);
+            if (delay === 250) audioPolls.push(callback);
+            return 1;
+        }, clearTimeout() {},
         FileReader: class {
             readAsDataURL(file) { this.result = file.data; this.onload(); }
         },
@@ -84,7 +98,7 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
                 return contentFetch(address, options);
             }
             if (address.endsWith('/microphone')) {
-                return Promise.resolve({ ok: true, json: async () => ({ success: true, enabled: false }) });
+                return Promise.resolve({ ok: true, json: async () => ({ success: true, enabled: microphoneEnabled }) });
             }
             if (address.includes('/random-meme')) {
                 assert.ok(memeFetch, 'Unexpected meme request');
@@ -104,7 +118,7 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
     });
     await settle();
     return {
-        byId, document, requests, settings, listener,
+        byId, document, requests, settings, listener, audioPolls,
         outgoing: () => byId('messageTrack').children.filter(node => node.className === 'message outgoing'),
         type(text) { byId('messageInput').value = text; byId('messageInput').events.input(); },
         send() { byId('messageForm').requestSubmit(); },
@@ -250,6 +264,57 @@ test('a remembered listening session still displays the connection warning on an
     assert.equal(f.byId('listeningBar').hidden, false);
     assert.equal(f.byId('listeningLabel').textContent, 'Connection lost');
     assert.match(f.byId('listeningWarning').textContent, /may still be listening/);
+});
+
+test('Passive Listening shows incoming sound, quiet and offline states, then clears on Stop', async () => {
+    let offline = false;
+    let session = { id: 'audio-session', mode: 'live', state: 'recording', seconds: 1, text: '',
+        cadence_seconds: 10, audio: { detected: true, levels: Array(7).fill(0.5) } };
+    const f = await fixture({ liveFetch: async (path, options) => {
+        if (offline) throw new Error('Offline');
+        if (options.method === 'POST') session = { ...session, state: 'done', audio: null };
+        return { ok: true, json: async () => session };
+    } });
+    const meter = f.byId('listeningAudioMeter');
+    assert.equal(meter.hidden, false);
+    assert.equal(meter.dataset.state, 'sound');
+    assert.equal(f.byId('recordingAudioMeter').hidden, true);
+    session.audio = { detected: false, levels: Array(7).fill(0) };
+    await f.listener.refresh();
+    assert.equal(meter.dataset.state, 'quiet');
+    offline = true;
+    await f.listener.refresh();
+    assert.equal(meter.dataset.state, 'unavailable');
+    offline = false;
+    f.byId('stopListening').events.click();
+    assert.equal(meter.hidden, true);
+    await settle();
+    assert.equal(f.byId('listeningBar').hidden, true);
+});
+
+test('review recording updates audio independently of words and clears when finishing', async () => {
+    const session = { id: 'review-audio', mode: 'review', state: 'recording', seconds: 1, text: '',
+        audio: { detected: true, levels: Array(7).fill(0.6) } };
+    const f = await fixture({ microphoneEnabled: true, liveFetch: async (path) => ({ ok: true, json: async () => {
+        if (path === '/microphone/live') return { id: null, state: 'idle' };
+        if (path.endsWith('/stop')) Object.assign(session, { state: 'done', text: 'Recorded words', audio: null });
+        return session;
+    } }) });
+    await f.byId('microphoneButton').events.click();
+    await settle();
+    const meter = f.byId('recordingAudioMeter');
+    assert.equal(meter.hidden, false);
+    assert.equal(meter.dataset.state, 'sound');
+    assert.equal(f.byId('partialTranscript').hidden, true);
+    assert.equal(f.byId('listeningAudioMeter').hidden, true);
+    session.audio = { detected: false, levels: Array(7).fill(0) };
+    await f.audioPolls.shift()();
+    assert.equal(meter.dataset.state, 'quiet');
+    await f.byId('microphoneButton').events.click();
+    assert.equal(meter.hidden, true);
+    await f.audioPolls.shift()();
+    assert.equal(f.byId('messageInput').value, 'Recorded words');
+    assert.equal(f.byId('recording').hidden, true);
 });
 
 test('Send clears and focuses immediately, with back-to-back messages printed in order', async () => {

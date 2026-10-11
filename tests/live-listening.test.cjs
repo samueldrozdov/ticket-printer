@@ -36,6 +36,15 @@ test('opening the page discovers status without starting the microphone', async 
     assert.deepEqual(f.requests, [{ path: '/microphone/live', options: undefined }]);
 });
 
+test('polls recording audio promptly and slows down when idle, stopping or offline', async () => {
+    const f = fixture();
+    f.replies.push(idle, session(), session({ state: 'stopping' }), new Error('Offline'));
+    for (const delay of [5000, 250, 1000, 3000]) {
+        await f.controller.refresh();
+        assert.equal(f.timers.at(-1).delay, delay);
+    }
+});
+
 test('failed startup checks do not imply a listening session and recover without starting one', async () => {
     const f = fixture();
     f.replies.push(new Error('Offline'), new Error('Offline'), idle);

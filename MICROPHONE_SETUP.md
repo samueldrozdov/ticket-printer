@@ -12,9 +12,16 @@ is a separate action in this review flow.
 
 An opt-in backend mode can also listen continuously and print at a chosen cadence,
 with a duration limit or manual stop. See [LIVE_PRINT_API.md](LIVE_PRINT_API.md)
-for its API, or open **+ → Listen & print** in the chat to choose the cadence and
+for its API, or open **+ → Passive Listening** in the chat to choose the cadence and
 duration. The listening bar always exposes **Stop**; closing the page leaves the
 Pi listening until stopped or the duration expires.
+
+Both modes display an animated sound icon measured from the Pi's microphone,
+updating about four times per second. The bars grow with incoming volume and
+settle during quiet audio. If samples or the connection are unavailable, the bars
+reset and dim. Sound, quiet, and unavailable states are described to screen readers.
+Activity does not guarantee recognizable speech. Only level measurements reach
+the browser; microphone audio stays on the Pi.
 
 ## 1. Reconnect to the Pi
 

@@ -4,7 +4,7 @@ This backend mode captures the Pi's USB microphone, transcribes speech locally,
 and automatically prints the finalized text at a chosen cadence. It is separate
 from the existing 30-second record/review/print flow.
 
-In the chat, open **+ → Listen & print**. Choose **Print every** (including a custom
+In the chat, open **+ → Passive Listening**. Choose **Print every** (including a custom
 interval) and **Stop after**, or leave **Until I stop** selected. Press **Start
 listening**. The persistent listening bar shows the applied timing and ticket
 count, with a **Stop** button. Printed, waiting, cancelled, and failed tickets

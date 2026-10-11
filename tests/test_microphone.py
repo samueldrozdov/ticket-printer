@@ -1,3 +1,4 @@
+from array import array
 import json
 import tempfile
 import threading
@@ -7,8 +8,33 @@ from unittest.mock import Mock, patch
 
 from flask import Flask
 
-from microphone import Microphone, MicrophoneError, create_microphone_blueprint
+from microphone import Microphone, MicrophoneError, audio_activity, create_microphone_blueprint
 from print_history import PrintHistory
+
+
+class AudioActivityTests(unittest.TestCase):
+    def test_silence_and_low_noise_are_quiet(self):
+        for amplitude in (0, 8):
+            audio = audio_activity(array('h', [amplitude, -amplitude] * 2000).tobytes())
+            self.assertFalse(audio['detected'])
+            self.assertEqual(audio['levels'], [0] * 7)
+
+    def test_meter_tracks_volume_and_handles_full_scale_negative_samples(self):
+        levels = []
+        for amplitude in (256, 2048, 16384, -32768):
+            audio = audio_activity(array('h', [amplitude] * 4000).tobytes())
+            self.assertTrue(audio['detected'])
+            self.assertTrue(all(0 <= level <= 1 for level in audio['levels']))
+            levels.append(audio['level'])
+        self.assertEqual(levels, sorted(set(levels)))
+        self.assertEqual(levels[-1], 1)
+
+    def test_bars_reflect_the_samples_in_each_part_of_the_block(self):
+        samples = array('h', [value for amplitude in (0, 128, 256, 512, 1024, 4096, 16384)
+                              for value in [amplitude] * 100])
+        levels = audio_activity(samples.tobytes())['levels']
+        self.assertEqual(levels, sorted(set(levels)))
+        self.assertEqual(audio_activity(b'')['levels'], [0] * 7)
 
 
 class RecordingTests(unittest.TestCase):
@@ -28,6 +54,7 @@ class RecordingTests(unittest.TestCase):
 
             def __init__(self, **kwargs):
                 self.callback = kwargs['callback']
+                test.capture = self.callback
 
             def __enter__(self):
                 self.active = test.stream_active
@@ -83,6 +110,51 @@ class RecordingTests(unittest.TestCase):
         self.sd.check_input_settings.assert_called_once_with(
             device='Samson', channels=1, dtype='int16', samplerate=48000)
         self.vosk.KaldiRecognizer.assert_called_once_with(self.mic._model, 48000)
+
+    def test_both_modes_report_live_audio_and_clear_it_when_stopped(self):
+        self.chunks = [array('h', [2048, -2048] * 2000).tobytes()]
+        consumed = threading.Event()
+        self.vosk.KaldiRecognizer.return_value.AcceptWaveform.side_effect = lambda _: consumed.set() or False
+        self.mic._print_text = Mock()
+        for start in (self.mic.start, self.mic.start_live):
+            consumed.clear()
+            session = start()
+            self.assertTrue(consumed.wait(1))
+            status = self.mic.status(session['id'])
+            self.assertTrue(status['audio']['detected'])
+            self.assertNotIn('audio_sample', status)
+            # A fresh zero-filled block must show quiet, even if a transcript exists.
+            self.capture(bytes(8000), 4000, None, False)
+            self.assertFalse(self.mic.status(session['id'])['audio']['detected'])
+            self.assertIsNone(self.mic.stop(session['id'])['audio'])
+            self.assertIsNone(self.result(session)['audio'])
+            self.assertIsNone(self.mic._sessions[session['id']]['audio_sample'])
+
+    def test_stale_audio_is_unavailable_instead_of_appearing_quiet(self):
+        self.chunks = [array('h', [2048] * 4000).tobytes()]
+        consumed = threading.Event()
+        self.vosk.KaldiRecognizer.return_value.AcceptWaveform.side_effect = lambda _: consumed.set() or False
+        session = self.mic.start()
+        self.assertTrue(consumed.wait(1))
+        self.mic._sessions[session['id']]['audio_sample'] = (0, self.chunks[0])
+        self.assertIsNone(self.mic.status(session['id'])['audio'])
+
+    def test_meter_keeps_up_while_speech_recognition_is_blocked(self):
+        entered, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        self.chunks = [bytes(8000)]
+
+        def recognize(data):
+            entered.set()
+            release.wait(1)
+            return False
+
+        self.vosk.KaldiRecognizer.return_value.AcceptWaveform.side_effect = recognize
+        session = self.mic.start()
+        self.assertTrue(entered.wait(1))
+        self.capture(array('h', [2048] * 4000).tobytes(), 4000, None, False)
+        self.assertTrue(self.mic.status(session['id'])['audio']['detected'])
+        release.set()
 
     def test_connection_status_probes_device_without_recording(self):
         self.sd.query_devices.return_value = {'max_input_channels': 1}

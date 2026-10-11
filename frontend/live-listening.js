@@ -29,7 +29,8 @@
 
         notify() { this.onChange({ ...this.state, busy: this.busy, trackingSession: this.trackingSession }); }
 
-        later(delay = this.busy ? 1000 : 5000) {
+        later(delay = this.state.session?.state === 'recording' && !this.state.stopRequested
+            ? 250 : this.busy ? 1000 : 5000) {
             this.cancel(this.timer);
             if (!this.suspended) this.timer = this.schedule(() => this.refresh(), delay);
         }
@@ -91,7 +92,7 @@
                 }
                 this.state.offline = true;
                 this.state.error = !this.state.available
-                    ? 'Listen & print needs the updated backend on Samson.'
+                    ? 'Passive Listening needs the updated backend on Samson.'
                     : this.trackingSession ? 'Connection lost. Samson may still be listening. Reconnecting…'
                     : 'Couldn’t check Samson’s listening status. Retrying…';
             } finally {

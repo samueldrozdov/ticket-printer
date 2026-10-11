@@ -46,10 +46,12 @@ test('opening the site restores saved content, status and ticket previews withou
     assert.equal(rows.length, 4);
     assert.equal(rows[0].children[1].textContent, injection);
     assert.equal(rows[0].children[1].innerHTML, undefined);
+    assert.equal(rows[0].children.at(-1).textContent, 'Printed');
     assert.match(rows[1].children.at(-1).textContent, /no paper printed/);
-    assert.equal(rows[1].children[2].children[1].children[0].src, 'data:image/png;base64,photo');
-    assert.match(rows[2].children.at(-1).textContent, /Print not confirmed.*Listen & print/);
-    assert.match(rows[3].children.at(-1).textContent, /Print not confirmed/);
+    assert.equal(rows[1].children[2].className, 'paper-ticket');
+    assert.equal(rows[1].children[2].children[0].src, 'data:image/png;base64,photo');
+    assert.equal(rows[2].children.at(-1).textContent, 'Print not confirmed');
+    assert.equal(rows[3].children.at(-1).textContent, 'Print not confirmed');
     assert.equal(f.window.SamsonHistory.has(2), true);
     assert.equal(f.byId('historyMore').hidden, true);
     assert.equal(f.byId('historyNotice').hidden, true);

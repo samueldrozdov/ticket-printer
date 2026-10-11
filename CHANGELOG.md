@@ -43,9 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add an optional offline Sherpa listening backend with streaming English speech
   recognition and confidence-filtered, deduplicated sound labels on tickets.
 - Add a checksum-verified model installer and optional speech-only noise reduction.
+- Added an audio-reactive meter to recording and **Passive Listening**, with sound,
+  quiet, and unavailable states driven by Samson's microphone samples.
 - Added password-protected remote access, a single-process server for HTTPS
   tunnels, and a command to create a temporary Cloudflare link from the Pi.
-- Added **Listen & print** to the plus menu with custom print cadence, timed or
+- Added **Passive Listening** to the plus menu with custom print cadence, timed or
   indefinite listening, status recovery after refresh, and manual Stop.
 - Initial open source release
 - Web-based ticket submission interface

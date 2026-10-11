@@ -12,8 +12,8 @@ from ble_printer import IMAGE_MAX_WIDTH, encode_raster, prepare_thermal_image
 
 CELL_WIDTH = 12
 LINE_HEIGHT = 24
-DEFAULT_FEED_LINES = 3
-MAX_FEED_LINES = 10
+DEFAULT_FEED_LINES = 6
+MAX_FEED_LINES = 12
 DEFAULT_FONT_FAMILY = 'mono'
 DEFAULT_FONT_SIZE = 'medium'
 FONT_SIZES = {'small': 16, 'medium': 20, 'large': 28}

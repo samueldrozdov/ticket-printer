@@ -1,7 +1,9 @@
 """On-demand and continuous recording from the USB microphone on the printer host."""
 
+from array import array
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import queue
@@ -20,9 +22,28 @@ DEFAULT_CADENCE_SECONDS = 10
 MAX_CADENCE_SECONDS = 300
 MAX_DURATION_SECONDS = 86400
 AUDIO_QUEUE_BLOCKS = 64
+AUDIO_METER_BARS = 7
+AUDIO_METER_STALE_SECONDS = 1
 AUDIO_GAP_WARNING = "Some audio was missed. Check the transcript and printed tickets for missing words."
 logger = logging.getLogger(__name__)
 
+
+def audio_activity(data):
+    """Summarize native-endian mono int16 PCM without exposing audio to the browser."""
+    samples = array('h', data[:len(data) // 2 * 2])
+
+    def level(values):
+        if not values:
+            return 0.0
+        rms = math.sqrt(sum(value * value for value in values) / len(values)) / 32768
+        # A logarithmic scale makes quiet input visible; -60 dBFS is the floor.
+        return round(max(0.0, min(1.0, (20 * math.log10(max(rms, 1e-6)) + 60) / 60)), 3)
+
+    overall = level(samples)
+    return {"level": overall, "detected": overall >= 0.167,  # About -50 dBFS; sound, not speech detection.
+            "levels": [level(samples[index * len(samples) // AUDIO_METER_BARS:
+                                     (index + 1) * len(samples) // AUDIO_METER_BARS])
+                       for index in range(AUDIO_METER_BARS)]}
 
 
 class MicrophoneError(Exception):
@@ -69,7 +90,7 @@ class Microphone:
                 raise MicrophoneError("The Pi microphone is already in use. Try again when recording finishes.", 409)
             session_id = secrets.token_urlsafe(24)
             session = {"id": session_id, "state": "starting", "text": "", "error": None,
-                       "warning": None, "audio_overflows": 0,
+                       "warning": None, "audio_overflows": 0, "audio_sample": None,
                        "started_at": None, "ended_at": None, "stop": threading.Event(),
                        "mode": "live" if cadence_seconds is not None else "review",
                        "cadence_seconds": cadence_seconds, "duration_seconds": duration_seconds,
@@ -98,6 +119,11 @@ class Microphone:
             result = {key: session[key] for key in (
                 "id", "state", "mode", "text", "error", "warning", "audio_overflows", "stop_reason")}
             result.update(max_seconds=limit, seconds=int(min(limit, elapsed) if limit is not None else elapsed))
+            sample = session["audio_sample"]
+            result["audio"] = audio_activity(sample[1]) if (
+                session["state"] == "recording" and not session["stop"].is_set() and sample and
+                time.monotonic() - sample[0] <= AUDIO_METER_STALE_SECONDS
+            ) else None
             if session["mode"] == "live":
                 result.update(cadence_seconds=session["cadence_seconds"], duration_seconds=limit,
                               flush_on_stop=session["flush_on_stop"], **session["live"].snapshot())
@@ -219,7 +245,11 @@ class Microphone:
                         failed.set()
                         raise sd.CallbackAbort
                 try:
-                    audio.put_nowait((bytes(indata), frames))
+                    data = bytes(indata)
+                    # Publish one immutable snapshot. Meter calculations happen in
+                    # status requests, with no extra locks or DSP in this callback.
+                    session["audio_sample"] = (time.monotonic(), data)
+                    audio.put_nowait((data, frames))
                 except queue.Full:
                     failure_reason = "queue_full"
                     failed.set()
@@ -300,7 +330,7 @@ class Microphone:
             report_overflows()
             if timer:
                 timer.cancel()
-            self._update(session, ended_at=session["ended_at"] or time.monotonic())
+            self._update(session, ended_at=session["ended_at"] or time.monotonic(), audio_sample=None)
             if live:
                 live.finish()
                 live.wait()

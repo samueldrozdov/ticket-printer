@@ -5,9 +5,9 @@
     const dialog = byId('samsonSettings');
     const toggle = byId('includeDate');
     const storageKey = `samson-include-date:${window.PRINTER_API_URL}`;
-    const feedOptions = [[byId('feedLinesNone'), 0], [byId('feedLinesDefault'), 3], [byId('feedLinesLarge'), 10]];
-    let feedLines = 3;
-    const feedStorageKey = `samson-feed-lines:${window.PRINTER_API_URL}`;
+    const feedOptions = [[byId('feedLinesSmall'), 3], [byId('feedLinesDefault'), 6], [byId('feedLinesLarge'), 12]];
+    let feedLines = 6;
+    const feedStorageKey = `samson-feed-lines-v2:${window.PRINTER_API_URL}`;
     const fontFamily = byId('fontFamily');
     const fontStorageKey = `samson-font-family:${window.PRINTER_API_URL}`;
     const fontSizeStorageKey = `samson-font-size:${window.PRINTER_API_URL}`;
@@ -24,7 +24,7 @@
     catch { /* The preference still works for this page if storage is disabled. */ }
 
     function readFeedLines(value) {
-        return value === '0' ? 0 : value === '10' ? 10 : 3;
+        return value === '3' ? 3 : value === '12' ? 12 : 6;
     }
     function updateFeedLines(value, save = false) {
         feedLines = readFeedLines(value);
@@ -34,8 +34,16 @@
             catch { /* Keep the in-memory preference. */ }
         }
     }
-    updateFeedLines('3');
-    try { updateFeedLines(localStorage.getItem(feedStorageKey)); }
+    updateFeedLines('6');
+    try {
+        let saved = localStorage.getItem(feedStorageKey);
+        if (saved === null) {
+            // Preserve the selected size when migrating the original 0/3/10 presets.
+            const legacy = localStorage.getItem(`samson-feed-lines:${window.PRINTER_API_URL}`);
+            saved = { '0': '3', '3': '6', '10': '12' }[legacy];
+        }
+        updateFeedLines(saved);
+    }
     catch { /* Keep the default if storage is disabled. */ }
 
     function preference(key, fallback, values, render) {

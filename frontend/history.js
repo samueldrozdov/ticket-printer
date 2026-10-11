@@ -22,7 +22,7 @@
     }
 
     function render(entry) {
-        const article = element('article', 'history-entry');
+        const article = element('article', 'message outgoing history-entry');
         const date = new Date(entry.created_at);
         const time = element('time', '', date.toLocaleString([], {
             year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
@@ -30,13 +30,10 @@
         time.dateTime = entry.created_at;
         article.append(time);
         const status = { printed: 'Printed', test_mode: 'Test preview · no paper printed',
-            failed: 'Print not confirmed · check the printer',
-            unconfirmed: 'Print not confirmed · check the printer' }[entry.status] || 'Print not confirmed';
-        const origin = { listening: 'Listen & print', ticket: 'Ticket', chat: 'Message' }[entry.source] || 'Ticket';
+            failed: 'Print not confirmed',
+            unconfirmed: 'Print not confirmed' }[entry.status] || 'Print not confirmed';
         article.append(element('div', 'bubble', entry.text || 'Photo'));
         if (entry.preview?.image?.startsWith('data:image/png;base64,')) {
-            const details = element('details', 'history-preview');
-            details.append(element('summary', '', entry.preview.image_only ? 'View photo' : 'View ticket'));
             const paper = element('div', 'paper-ticket');
             const image = element('img', 'paper-ticket-image');
             image.alt = entry.kind === 'image' ? 'Saved ticket including photo' : 'Saved ticket';
@@ -45,10 +42,9 @@
             image.loading = 'lazy';
             image.src = entry.preview.image;
             paper.append(image);
-            details.append(paper);
-            article.append(details);
+            article.append(paper);
         }
-        const meta = element('span', 'message-meta', `${status} · ${origin}`);
+        const meta = element('span', 'message-meta', status);
         if (['failed', 'unconfirmed'].includes(entry.status)) meta.classList.add('failed');
         article.append(meta);
         return article;

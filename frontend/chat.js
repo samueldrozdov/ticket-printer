@@ -19,6 +19,8 @@
     const recording = byId('recording');
     const recordingLabel = byId('recordingLabel');
     const partialTranscript = byId('partialTranscript');
+    const recordingMeter = new window.AudioMeter(byId('recordingAudioMeter'));
+    const listeningMeter = new window.AudioMeter(byId('listeningAudioMeter'));
     const mic = { enabled: false, busy: false, session: null, stopping: false,
         baseText: '', partial: '', failures: 0, timer: null, maxSeconds: 30 };
     const listenSettings = byId('listenSettings');
@@ -128,7 +130,7 @@
             (mic.busy ? !mic.session || mic.stopping : !mic.enabled);
         micButton.setAttribute('aria-pressed', String(mic.busy));
         micButton.setAttribute('aria-label', liveUI.busy && !liveUI.checking
-            ? 'Microphone is in use by Listen and print' : mic.busy ? 'Stop recording' : 'Record on Samson');
+            ? 'Microphone is in use by Passive Listening' : mic.busy ? 'Stop recording' : 'Record on Samson');
         byId('startListening').disabled = !mic.enabled || liveUI.busy || !liveUI.available || locked || imageLoading;
         byId('microphoneIcon').toggleAttribute('hidden', mic.busy);
         byId('stopIcon').toggleAttribute('hidden', !mic.busy);
@@ -332,7 +334,7 @@
     const elapsedTime = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
     function showListenSettingsError(message = '') {
-        const text = message || (!liveUI.available ? 'Listen & print needs the updated backend on Samson.'
+        const text = message || (!liveUI.available ? 'Passive Listening needs the updated backend on Samson.'
             : liveUI.checking ? 'Checking Samson’s listening status…'
             : liveUI.busy ? 'A listening session is already active. Use Stop to finish it.'
             : !mic.enabled ? 'Samson’s microphone is unavailable. Check its connection and microphone setup.' : '');
@@ -347,6 +349,7 @@
         const bar = byId('listeningBar');
         bar.hidden = !visible;
         bar.dataset.offline = String(state.offline);
+        listeningMeter.update(visible ? session : null, { offline: state.offline, stopping: state.stopRequested });
         const label = state.offline ? 'Connection lost' : state.stopRequested ? 'Stopping…'
             : session?.state === 'recording' ? 'Listening'
             : session && ['stopping', 'error'].includes(session.state) ? 'Finishing…' : 'Starting…';
@@ -475,6 +478,7 @@
 
     function finishMicrophone(data) {
         clearTimeout(mic.timer);
+        recordingMeter.update(null);
         const text = data.text || (data.error ? mic.partial : '');
         // Keep the complete transcript, even when it needs shortening before sending.
         input.value = [mic.baseText, text].filter(Boolean).join('\n');
@@ -501,6 +505,7 @@
             const data = await api(`/microphone/${encodeURIComponent(session)}`);
             if (session !== mic.session) return;
             mic.failures = 0;
+            recordingMeter.update(data, { stopping: mic.stopping });
             mic.partial = data.text || '';
             partialTranscript.textContent = mic.partial;
             partialTranscript.hidden = !mic.partial;
@@ -512,10 +517,11 @@
             }
             setRecordingLabel(mic.stopping || ['stopping', 'transcribing'].includes(data.state) ? 'Finishing…'
                 : data.state === 'recording' ? 'Listening…' : 'Starting…');
-            mic.timer = setTimeout(pollMicrophone, 500);
+            mic.timer = setTimeout(pollMicrophone, data.state === 'recording' ? 250 : 500);
         } catch {
             if (session !== mic.session) return;
             mic.failures++;
+            recordingMeter.update({ state: 'recording' }, { offline: true, stopping: mic.stopping });
             if (mic.failures >= 3) {
                 // Best effort release; Samson also enforces its own recording deadline.
                 api(`/microphone/${encodeURIComponent(session)}/stop`, { method: 'POST', body: {} }).catch(() => {});
@@ -532,6 +538,7 @@
         if (mic.session) {
             const session = mic.session;
             mic.stopping = true;
+            recordingMeter.update(null);
             setRecordingLabel('Finishing…');
             updateComposer();
             try {
@@ -551,6 +558,7 @@
         mic.partial = '';
         mic.failures = 0;
         mic.busy = true;
+        recordingMeter.update(null);
         partialTranscript.textContent = '';
         partialTranscript.hidden = true;
         byId('recordingTime').textContent = '0:00';
@@ -774,6 +782,8 @@
     window.addEventListener('resize', updateComposer);
     window.addEventListener('pagehide', () => {
         clearTimeout(mic.timer);
+        recordingMeter.update(null);
+        listeningMeter.update(null);
         listener.suspend(); // Live mode runs on the Pi until stopped or its duration expires.
         if (mic.session) {
             fetch(`${apiUrl}/microphone/${encodeURIComponent(mic.session)}/stop`, {

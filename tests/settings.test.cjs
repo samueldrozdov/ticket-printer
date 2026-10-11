@@ -37,30 +37,43 @@ async function fixture(health = localHealth, url = 'http://127.0.0.1:8792', stor
         async refresh() { await byId('refreshConnections').events.click(); await settle(); } };
 }
 
-test('message spacing defaults to three lines and remembers zero after reload', async () => {
+test('message spacing defaults to six lines and remembers small spacing after reload', async () => {
     const f = await fixture();
+    assert.equal(f.settings.feedLines, 6);
+    f.byId('feedLinesSmall').checked = true;
+    f.byId('feedLinesSmall').events.change();
     assert.equal(f.settings.feedLines, 3);
-    f.byId('feedLinesNone').checked = true;
-    f.byId('feedLinesNone').events.change();
-    assert.equal(f.settings.feedLines, 0);
     const reopened = await fixture(localHealth, undefined, f.storage);
-    assert.equal(reopened.settings.feedLines, 0);
+    assert.equal(reopened.settings.feedLines, 3);
     const otherPrinter = await fixture(localHealth, 'http://another-printer.test', f.storage);
-    assert.equal(otherPrinter.settings.feedLines, 3);
+    assert.equal(otherPrinter.settings.feedLines, 6);
 });
 
 test('spacing synchronizes between tabs and falls back safely for invalid saved values', async () => {
     const f = await fixture();
-    const key = 'samson-feed-lines:http://127.0.0.1:8792';
-    f.events.storage({ key, newValue: '10' });
-    assert.equal(f.settings.feedLines, 10);
+    const key = 'samson-feed-lines-v2:http://127.0.0.1:8792';
+    f.events.storage({ key, newValue: '12' });
+    assert.equal(f.settings.feedLines, 12);
     f.events.storage({ key: 'unrelated', newValue: '1' });
-    assert.equal(f.settings.feedLines, 10);
+    assert.equal(f.settings.feedLines, 12);
     f.events.storage({ key: null, newValue: null });
-    assert.equal(f.settings.feedLines, 3);
-    for (const value of ['-1', '11', '1.5', '', 'invalid', '1', '5', '9']) {
+    assert.equal(f.settings.feedLines, 6);
+    for (const value of ['-1', '13', '1.5', '', 'invalid', '0', '1', '5', '9', '10']) {
         const saved = await fixture(localHealth, undefined, new Map([[key, value]]));
-        assert.equal(saved.settings.feedLines, 3);
+        assert.equal(saved.settings.feedLines, 6);
+    }
+});
+
+test('original spacing preferences preserve the selected size until a new choice is saved', async () => {
+    const key = 'samson-feed-lines:http://127.0.0.1:8792';
+    for (const [legacy, lines, id] of [['0', 3, 'feedLinesSmall'], ['3', 6, 'feedLinesDefault'], ['10', 12, 'feedLinesLarge']]) {
+        const f = await fixture(localHealth, undefined, new Map([[key, legacy]]));
+        assert.equal(f.settings.feedLines, lines);
+        assert.equal(f.byId(id).checked, true);
+        f.byId('feedLinesSmall').checked = true;
+        f.byId('feedLinesSmall').events.change();
+        const reopened = await fixture(localHealth, undefined, f.storage);
+        assert.equal(reopened.settings.feedLines, 3);
     }
 });
 

@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
     <title>Samson · Messages</title>
-    <link rel="icon" href="data:,">
+    <link rel="icon" type="image/png" href="assets/samson-avatar.png">
     <link rel="stylesheet" href="chat.css">
     <script>
         // Set this URL when the frontend is hosted separately from Samson.
@@ -19,6 +19,7 @@
         ).replace(/\/$/, '');
     </script>
     <script src="live-listening.js" defer></script>
+    <script src="audio-meter.js" defer></script>
     <script src="settings.js" defer></script>
     <script src="history.js" defer></script>
     <script src="chat.js" defer></script>
@@ -56,9 +57,9 @@
                     <div class="settings-row spacing-setting">
                         <span id="messageSpacingLabel">Spacing</span>
                         <div class="spacing-options" role="radiogroup" aria-labelledby="messageSpacingLabel">
-                            <label><input id="feedLinesNone" type="radio" name="messageSpacing" value="0" aria-label="Small message spacing"><span>S</span></label>
-                            <label><input id="feedLinesDefault" type="radio" name="messageSpacing" value="3" aria-label="Medium message spacing" checked><span>M</span></label>
-                            <label><input id="feedLinesLarge" type="radio" name="messageSpacing" value="10" aria-label="Large message spacing"><span>L</span></label>
+                            <label><input id="feedLinesSmall" type="radio" name="messageSpacing" value="3" aria-label="Small message spacing"><span>S</span></label>
+                            <label><input id="feedLinesDefault" type="radio" name="messageSpacing" value="6" aria-label="Medium message spacing" checked><span>M</span></label>
+                            <label><input id="feedLinesLarge" type="radio" name="messageSpacing" value="12" aria-label="Large message spacing"><span>L</span></label>
                         </div>
                     </div>
                     <label class="settings-row font-setting" for="fontFamily"><span>Font</span><span class="font-select">
@@ -109,23 +110,24 @@
                 <button id="photoButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-image"/></svg></span>Photo</button>
                 <button id="vocabButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-book"/></svg></span>Vocab Word</button>
                 <button id="memeButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-smile"/></svg></span>Random Meme</button>
-                <div class="menu-divider"></div>
-                <button id="listenButton" type="button" aria-controls="listenSettings"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-live"/></svg></span><span class="menu-copy">Listen &amp; print<small>Print as you speak</small></span><svg class="menu-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg></button>
+                <button id="listenButton" type="button" aria-controls="listenSettings"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-live"/></svg></span><span class="menu-copy">Passive Listening</span><svg class="menu-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg></button>
             </div>
             <form class="listen-settings" id="listenSettings" aria-labelledby="listenSettingsTitle" hidden>
-                <div class="listen-heading"><h2 id="listenSettingsTitle">Listen &amp; print</h2><button class="icon-button listen-close" id="closeListenSettings" type="button" aria-label="Back to plus menu"><svg aria-hidden="true"><use href="#icon-close"/></svg></button></div>
-                <p class="listen-description">Samson keeps listening and puts what you say on paper, automatically.</p>
+                <div class="listen-heading"><h2 id="listenSettingsTitle">Passive Listening</h2><button class="icon-button listen-close" id="closeListenSettings" type="button" aria-label="Back to plus menu"><svg aria-hidden="true"><use href="#icon-close"/></svg></button></div>
                 <div class="listen-fields">
                     <div class="listen-option"><label for="listenCadence">Print every</label><select id="listenCadence"><option value="10">10 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="300">5 minutes</option><option value="custom">Custom…</option></select><label class="listen-custom" id="customCadenceRow" hidden><input id="customCadence" type="number" min="1" max="300" step="1" value="20" aria-label="Print interval in seconds" disabled required>seconds · up to 300</label></div>
                     <div class="listen-option"><label for="listenDuration">Stop after</label><select id="listenDuration"><option value="0">Until I stop</option><option value="300">5 minutes</option><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="custom">Custom…</option></select><label class="listen-custom" id="customDurationRow" hidden><input id="customDuration" type="number" min="1" max="1440" step="1" value="10" aria-label="Listening duration in minutes" disabled required>minutes · up to 1,440</label></div>
                 </div>
-                <p class="listen-hint">Silence won’t print. Listening continues if you close this page.</p>
                 <p class="listen-error" id="listenSettingsError" role="alert" hidden></p>
                 <button class="listen-start" id="startListening" type="submit" disabled><svg aria-hidden="true"><use href="#icon-mic"/></svg><span>Start listening</span></button>
             </form>
             <div class="listening-bar" id="listeningBar" hidden>
-                <svg class="listening-icon" aria-hidden="true"><use href="#icon-live"/></svg>
-                <div class="listening-copy"><div class="listening-title"><span id="listeningLabel">Starting…</span><time id="listeningTime">0:00</time></div><p id="listeningDetails" class="listening-details"></p><p id="listeningWarning" class="listening-warning" hidden></p></div>
+                <div class="audio-meter" id="listeningAudioMeter" hidden></div>
+                <div class="listening-copy">
+                    <div class="listening-title"><span id="listeningLabel">Starting…</span><time id="listeningTime">0:00</time></div>
+                    <p id="listeningDetails" class="listening-details"></p>
+                    <p id="listeningWarning" class="listening-warning" hidden></p>
+                </div>
                 <button class="listening-stop" id="stopListening" type="button"><svg aria-hidden="true"><use href="#icon-stop"/></svg><span>Stop</span></button>
             </div>
             <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
@@ -143,7 +145,7 @@
                     <div class="input-row">
                         <textarea id="messageInput" rows="1" maxlength="1000" aria-label="Message Samson" placeholder="Message Samson"></textarea>
                         <div class="recording" id="recording" hidden>
-                            <div class="recording-bar"><span class="recording-label" id="recordingLabel">Starting…</span><time id="recordingTime">0:00</time></div>
+                            <div class="recording-bar"><div class="audio-meter" id="recordingAudioMeter" hidden></div><span class="recording-label" id="recordingLabel">Starting…</span><time id="recordingTime">0:00</time></div>
                             <p class="partial-transcript" id="partialTranscript" hidden></p>
                         </div>
                         <button class="icon-button send-button" id="sendButton" type="submit" aria-label="Send to Samson" hidden>

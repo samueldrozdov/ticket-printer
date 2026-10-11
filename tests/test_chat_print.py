@@ -61,7 +61,7 @@ class ChatPrintTests(unittest.TestCase):
     def test_chat_assets_are_served_by_the_pi(self):
         for path, content_type in [('/', 'text/html'), ('/chat.css', 'text/css'),
                                    ('/chat.js', 'javascript'), ('/history.js', 'javascript'),
-                                   ('/live-listening.js', 'javascript')]:
+                                   ('/live-listening.js', 'javascript'), ('/audio-meter.js', 'javascript')]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -103,8 +103,8 @@ class ChatPrintTests(unittest.TestCase):
         self.assertIn('A little reminder', result.json['preview']['text'])
         self.assert_preview_matches_print(result, print_image.call_args.args[1])
         preview = preview_image(result)
-        # The 768 x 96 photo fits at 384 x 48, immediately above the 72-dot feed.
-        photo_pixels = preview.crop((0, preview.height - 120, preview.width, preview.height - 72))
+        # The 768 x 96 photo fits at 384 x 48, immediately above the 144-dot feed.
+        photo_pixels = preview.crop((0, preview.height - 192, preview.width, preview.height - 144))
         self.assertEqual(photo_pixels.getextrema(), (0, 255))
         print_text.assert_not_called()
 
@@ -143,15 +143,16 @@ class ChatPrintTests(unittest.TestCase):
                         patch.object(printer_app, 'ble_print_raster_ticket') as bluetooth, \
                         patch.object(printer_app, 'get_printer', return_value=Mock()) as device:
                     images = []
-                    for lines in [0, 3, 10]:
+                    for lines in [0, 3, 6, 12]:
                         response = self.client.post('/print', json={**body, 'include_date': False, 'feed_lines': lines})
                         self.assertEqual(response.status_code, 200)
                         payload = bluetooth.call_args.args[1] if transport_type == 'ble' else device.return_value._raw.call_args.args[0]
                         self.assert_preview_matches_print(response, payload)
                         images.append(preview_image(response))
-                    content, normal, longest = images
-                    self.assertEqual(normal.height - content.height, 72)
-                    self.assertEqual(longest.height - content.height, 240)
+                    content, small, normal, longest = images
+                    self.assertEqual(small.height - content.height, 72)
+                    self.assertEqual(normal.height - content.height, 144)
+                    self.assertEqual(longest.height - content.height, 288)
                     self.assertEqual(longest.crop((0, 0, content.width, content.height)).tobytes(), content.tobytes())
                     self.assertEqual(longest.crop((0, content.height, longest.width, longest.height)).getextrema(), (255, 255))
                     default = self.client.post('/print', json={**body, 'include_date': False})
@@ -161,11 +162,11 @@ class ChatPrintTests(unittest.TestCase):
         with patch.object(printer_app, 'get_printer') as printer, \
                 patch.object(printer_app, 'ble_print_raster_ticket') as bluetooth, \
                 patch.object(printer_app.print_history, 'record') as history:
-            for value in [-1, 11, 1.5, '3', True, False, None, [], {}]:
+            for value in [-1, 13, 1.5, '3', True, False, None, [], {}]:
                 with self.subTest(value=value):
                     response = self.client.post('/print', json={'content': 'Hello', 'feed_lines': value})
                     self.assertEqual(response.status_code, 400)
-                    self.assertIn('0 to 10', response.json['error'])
+                    self.assertIn('0 to 12', response.json['error'])
             printer.assert_not_called()
             bluetooth.assert_not_called()
             history.assert_not_called()

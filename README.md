@@ -52,8 +52,8 @@ Messages print in the order sent; keep the page open until queued messages finis
 Unconfirmed messages stay visible with their error directly underneath.
 
 Open Samson’s settings and choose **Message spacing** to set the extra blank
-paper after sent text or photo messages: **S** (0 lines), **M** (3 lines, default),
-or **L** (10 lines). This
+paper after sent text or photo messages: **S** (3 lines), **M** (6 lines, default),
+or **L** (12 lines). This
 preference is saved in your browser for each server and applies when you send
 each message. Ticket previews and saved history show the same spacing.
 
@@ -64,8 +64,8 @@ Long text wraps to fit the paper; ticket previews and history preserve the
 printed font and size. Additional fonts and their license are bundled in `fonts/`.
 
 The website loads saved print history automatically when opened, including chat
-tickets, photos, and **Listen & print** output. Use **Load older tickets** to browse
-earlier prints and **View ticket** to see the saved paper preview. Failed attempts
+tickets, photos, and **Passive Listening** output. Use **Load older tickets** to browse
+earlier prints; saved paper previews appear directly in the history. Failed attempts
 and test previews have separate labels. Opening history never reprints a ticket.
 
 History is stored by `app.py` in `data/print-history.sqlite3` on the server, so it
@@ -83,8 +83,10 @@ the Pi behind an HTTPS tunnel; the Pi stays online beside the printer.
 For the Samson USB microphone → review text → print workflow, see
 [MICROPHONE_SETUP.md](MICROPHONE_SETUP.md). It runs speech recognition locally on
 the Pi and uses the root `app.py` application.
+Both recording modes show an animated sound icon that reacts to microphone volume,
+so you can see whether Samson is picking up audio before words appear.
 
-For continuous listening, choose **+ → Listen & print** in the chat. Set the print
+For continuous listening, choose **+ → Passive Listening** in the chat. Set the print
 cadence and optional duration, then use **Stop** in the listening bar to turn it
 off. See [LIVE_PRINT_API.md](LIVE_PRINT_API.md) for the API and recovery behavior.
 
@@ -255,7 +257,7 @@ Conversation history stays in the current page and resets when you reload.
 Click **Samson** at the top to open settings and connection info for the Pi,
 microphone, and printer. **Include date** adds the date and time to printed tickets;
 it defaults to on and is remembered in this browser. Changes apply to new chat
-tickets (including photos) and newly started Listen & print sessions.
+tickets (including photos) and newly started Passive Listening sessions.
 Connection info identifies the server as a Raspberry Pi only when its hardware
 reports that identity. A local Mac or another computer is labeled as a server,
 with its address, printer connection type, and a reason if printing needs setup.
