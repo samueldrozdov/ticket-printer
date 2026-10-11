@@ -268,7 +268,12 @@ tilted, torn-paper card contains the actual black-and-white bitmap sent to the
 printer, including the Pi's timestamp, complete wrapped text, and processed photo.
 Chat tickets are rendered once on the Pi and sent as raster graphics on every
 printer connection; long messages are split into bands without shrinking or
-truncating them. Raster text can take longer to transfer over BLE than native text.
+truncating them. Trailing blank lines use compact paper-feed commands instead of
+full-width white raster data, preserving the selected spacing without an extra
+image transfer. Raster text can take longer to transfer over BLE than native text.
+If another job owns the printer, Send shows **Waiting for printer…** and waits
+for admission for roughly a minute. A message rejected throughout that wait is
+labeled **Not sent**. Failed or uncertain prints are never automatically resent.
 `IMAGE_MAX_WIDTH` sets the printable dot width (384 by default); the image height,
 contrast, and dithering settings apply to attached photos, not the whole ticket.
 Physical paper margins, tear position, and ink density depend on the printer.

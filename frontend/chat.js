@@ -62,7 +62,7 @@
         window.SamsonSettings.setApiReachable(connected);
     }
 
-    async function api(path, { method = 'GET', body, timeout = 10000, checkWaits = 0 } = {}) {
+    async function api(path, { method = 'GET', body, timeout = 10000, checkWaits = 0, onWait } = {}) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout);
         try {
@@ -84,18 +84,21 @@
                 throw new Error('Samson returned an unreadable reply. Reload the page before trying again.');
             }
             setConnected(true);
-            // This exact rejection proves printing has not started. Wait out a
-            // short health check; never retry an ambiguous or failed print.
+            // These admission rejections prove this message has not touched the
+            // printer. Wait for the existing job; never replay an attempted print.
             if (path === '/print' && response.status === 503 && data.success === false &&
-                data.printer_state === 'checking' && checkWaits < 10) {
+                ['checking', 'busy'].includes(data.printer_state) &&
+                checkWaits < (data.printer_state === 'busy' ? 120 : 10)) {
                 clearTimeout(timer);
+                onWait?.();
                 await new Promise(resolve => setTimeout(resolve, 500));
-                return api(path, { method, body, timeout, checkWaits: checkWaits + 1 });
+                return api(path, { method, body, timeout, checkWaits: checkWaits + 1, onWait });
             }
             if (!response.ok || data.success === false) {
                 const error = new Error(data.error || 'Samson couldn’t complete that request.');
                 error.reachable = true;
                 error.status = response.status;
+                error.notStarted = response.status === 503 && ['checking', 'busy'].includes(data.printer_state);
                 throw error;
             }
             return data;
@@ -228,17 +231,19 @@
     async function printMessage(body, image, status) {
         status.textContent = 'Printing…';
         try {
-            // Only a pre-print "checking" rejection may wait and try admission again.
-            const data = await api('/print', { method: 'POST', body, timeout: 120000 });
+            const data = await api('/print', { method: 'POST', body, timeout: 120000,
+                onWait: () => { status.textContent = 'Waiting for printer…'; } });
             if (data.success !== true) throw new Error('Samson did not confirm the print.');
             window.SamsonHistory?.markCurrent(data.history_id);
             const testMode = data.test_mode === true;
             status.textContent = `${testMode ? 'Logged in test mode' : 'Printed'} · ${timeString()}`;
             addConfirmation(image, testMode, data.preview, status.parentNode);
         } catch (error) {
-            status.textContent = 'Print not confirmed';
+            status.textContent = error.notStarted ? 'Not sent' : 'Print not confirmed';
             status.classList.add('failed');
-            showError(`Couldn’t confirm printing. ${error.message} Your message is kept above. Check the printer before sending it again.`, status.parentNode);
+            showError(error.notStarted
+                ? `${error.message} This message was not sent to the printer and is kept above.`
+                : `Couldn’t confirm printing. ${error.message} Your message is kept above. Check the printer before sending it again.`, status.parentNode);
         }
     }
 

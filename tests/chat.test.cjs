@@ -165,6 +165,57 @@ test('Send waits through a health check that explicitly rejected admission, then
     assert.match(f.outgoing()[0].children.at(-1).textContent, /Logged in test mode/);
 });
 
+test('Send waits while another ticket owns the printer, without duplicating either message', async () => {
+    const f = await fixture();
+    f.type('Second ticket');
+    f.send();
+    await settle();
+    for (let attempt = 0; attempt < 3; attempt++) {
+        f.requests[attempt].respond({ ok: false, status: 503,
+            json: async () => ({ success: false, printer_state: 'busy' }) });
+        await settle(); await settle();
+        assert.equal(f.outgoing()[0].children.at(-1).textContent, 'Waiting for printer…');
+    }
+    assert.equal(f.requests.length, 4);
+    assert.ok(f.requests.every(request => JSON.stringify(request.body) === JSON.stringify(f.requests[0].body)));
+    f.requests[3].succeed();
+    await settle();
+    assert.equal(f.outgoing().length, 1);
+    assert.match(f.outgoing()[0].children.at(-1).textContent, /Logged in test mode/);
+});
+
+test('a bounded busy wait reports Not sent without an ambiguous printing warning', async () => {
+    const f = await fixture();
+    f.type('Still waiting');
+    f.send();
+    await settle();
+    for (let attempt = 0; attempt <= 120; attempt++) {
+        f.requests[attempt].respond({ ok: false, status: 503,
+            json: async () => ({ success: false, printer_state: 'busy', error: 'Printer is busy.' }) });
+        await settle(); await settle();
+    }
+    assert.equal(f.requests.length, 121);
+    assert.equal(f.outgoing()[0].children.at(-1).textContent, 'Not sent');
+    const error = f.byId('messageTrack').children[1].children[0].textContent;
+    assert.match(error, /not sent to the printer/);
+    assert.doesNotMatch(error, /check the printer|not confirmed/i);
+});
+
+test('waiting for admission never retries a subsequent ambiguous print failure', async () => {
+    const f = await fixture();
+    f.type('Only try once after admission');
+    f.send();
+    await settle();
+    f.requests[0].respond({ ok: false, status: 503,
+        json: async () => ({ success: false, printer_state: 'busy' }) });
+    await settle(); await settle();
+    f.requests[1].respond({ ok: false, status: 500,
+        json: async () => ({ success: false, error: 'Bluetooth interrupted' }) });
+    await settle(); await settle();
+    assert.equal(f.requests.length, 2);
+    assert.match(f.outgoing()[0].children.at(-1).textContent, /not confirmed/i);
+});
+
 test('an actual printer failure is never retried even when it returns 503', async () => {
     const f = await fixture();
     f.type('Unconfirmed ticket');

@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from barcode.writer import ImageWriter
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from ble_printer import IMAGE_MAX_WIDTH, encode_raster, prepare_thermal_image
 
@@ -109,8 +109,17 @@ def ticket_preview(ticket, text):
 
 
 def ticket_payload(ticket):
-    # Short raster bands avoid printer buffer limits without shrinking long tickets.
-    bands = [encode_raster(ticket.crop((0, top, ticket.width, min(top + 256, ticket.height))))
-             for top in range(0, ticket.height, 256)]
-    # Initialize, left align, send the exact pixels, then cut. Feed is in the bitmap.
-    return b'\x1b@\x1ba\x00' + b''.join(bands) + b'\x1dV\x00'
+    # Sending blank margins as full-width raster data delays the final feed and
+    # can create a second, visibly paused print section. ESC J advances paper
+    # directly. Keep whole 24-dot lines so clone printers' minimum feed applies
+    # consistently, and retain one raster row even for an entirely white image.
+    ink = ImageChops.invert(ticket.convert('L')).getbbox()
+    blank_rows = ticket.height - (ink[3] if ink else 0)
+    feed_rows = min(blank_rows // LINE_HEIGHT, (ticket.height - 1) // LINE_HEIGHT) * LINE_HEIGHT
+    content_height = ticket.height - feed_rows
+    # Short content bands still protect the printer's raster buffer.
+    bands = [encode_raster(ticket.crop((0, top, ticket.width, min(top + 256, content_height))))
+             for top in range(0, content_height, 256)]
+    feed = b''.join(b'\x1bJ' + bytes([min(240, feed_rows - top)])
+                    for top in range(0, feed_rows, 240))
+    return b'\x1b@\x1ba\x00' + b''.join(bands) + feed + b'\x1dV\x00'

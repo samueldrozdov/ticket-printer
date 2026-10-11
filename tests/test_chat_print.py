@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from PIL import Image
+from ticket_layout import render_ticket, ticket_payload
 
 import app as printer_app
 
@@ -26,7 +27,10 @@ def printed_image(payload):
         pixels = bytes(value ^ 255 for value in payload[offset + 8:end])
         bands.append(Image.frombytes('1', (width_bytes * 8, height), pixels))
         offset = end
-    assert payload[offset:] == b'\x1dV\x00', 'Expected exactly one final cut and no extra text/feed'
+    while payload[offset:offset + 2] == b'\x1bJ':
+        bands.append(Image.new('1', (bands[0].width, payload[offset + 2]), 1))
+        offset += 3
+    assert payload[offset:] == b'\x1dV\x00', 'Expected exactly one final cut and no extra commands'
     image = Image.new('1', (bands[0].width, sum(band.height for band in bands)))
     top = 0
     for band in bands:
@@ -165,6 +169,27 @@ class ChatPrintTests(unittest.TestCase):
             printer.assert_not_called()
             bluetooth.assert_not_called()
             history.assert_not_called()
+
+    def test_blank_margin_uses_compact_feed_and_preserves_exact_ticket_pixels(self):
+        payloads = []
+        for lines in [0, 3, 10]:
+            ticket = render_ticket('Feed test\n', feed_lines=lines)
+            payload = ticket_payload(ticket)
+            reconstructed = printed_image(payload)
+            self.assertEqual(reconstructed.size, ticket.size)
+            self.assertEqual(reconstructed.tobytes(), ticket.tobytes())
+            payloads.append(payload)
+        # Ten extra blank lines used to require 11,520 bytes of raster data.
+        self.assertLessEqual(len(payloads[-1]) - len(payloads[0]), 3)
+
+    def test_white_tickets_and_long_content_preserve_feed_and_band_boundaries(self):
+        for ticket in [Image.new('1', (384, height), 1) for height in [1, 24, 240, 480, 601]] + [
+                render_ticket(('Long ticket\n' * 40) + 'Last line', feed_lines=10)]:
+            with self.subTest(height=ticket.height):
+                payload = ticket_payload(ticket)
+                reconstructed = printed_image(payload)
+                self.assertEqual(reconstructed.size, ticket.size)
+                self.assertEqual(reconstructed.tobytes(), ticket.tobytes())
 
     def test_background_print_honors_date_preference(self):
         with patch.object(printer_app, 'PRINTER_TYPE', 'ble'), \

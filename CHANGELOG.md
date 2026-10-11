@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Feed trailing blank paper with compact ESC/POS commands instead of slow raster
+  transfers, preserving the preview and selected margin.
+- Wait for a busy printer before sending the next message, and distinguish
+  messages that never started from uncertain print outcomes.
 - Continue recording after recoverable microphone input overflows, warn about
   missing audio, and distinguish transcription overload from a stopped USB stream.
 - Reuse an existing BlueZ printer connection when the connected printer stops
