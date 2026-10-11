@@ -1,0 +1,4 @@
+# Local neural speech recognition, sound events, and optional noise reduction.
+-r requirements-microphone.txt
+sherpa-onnx==1.13.8
+numpy>=1.26,<3

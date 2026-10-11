@@ -119,6 +119,64 @@ To check this flow before using paper, launch with `TEST_MODE=true python app.py
 This still uses the real Pi microphone but logs the print instead of using the
 printer. Restart without `TEST_MODE=true` for physical printing.
 
+## Upgrade to local speech and sound recognition
+
+For room listening, use the optional **Sherpa** backend. It runs two quantized
+models on the Pi: an English streaming Zipformer trained on LibriSpeech and
+GigaSpeech, and a small AudioSet sound classifier. Recognized sounds appear as
+labels such as **[dog barking]** alongside speech. Review mode keeps them in the
+draft; **Listen & print** prints them at the selected cadence.
+
+```bash
+python -m pip install -r requirements-listening.txt
+python install_listening_models.py
+```
+
+Set these values in the Pi's existing `.env`, then restart the app service:
+
+```dotenv
+MICROPHONE_BACKEND=sherpa
+SOUND_EVENT_THRESHOLD=0.6
+SPEECH_ENHANCEMENT=false
+```
+
+The installer downloads pinned model files from the official Sherpa releases and
+verifies their SHA-256 checksums. Downloads happen only during setup. Recognition
+is entirely local: no audio is uploaded or saved, and network access is not needed
+after installation. `LISTENING_MODELS_PATH` can override the local model folder.
+To revert, set `MICROPHONE_BACKEND=vosk` and restart; keep the old Vosk model installed.
+
+Sound labels are estimates, not guaranteed detections. The default allowlist
+includes barking, meowing, birds, laughter, coughing, sneezing, clapping, knocking,
+doorbells, phone ringing, sirens, and smoke-alarm sounds. Generic classes such as
+“animal” and low-confidence predictions are ignored. A continuous sound gets one
+label; two quiet classification windows rearm it, with at least 15 seconds between
+repeated labels. This is not a safety or emergency-monitoring system.
+
+**Distance:** software cannot restore speech that the microphone cannot capture
+clearly. For voices and sounds around the room, put the Go Mic in its **omni
+(circle)** pattern, off the printer's vibrating surface and away from the Pi's
+fan. For one speaker in a known direction, use cardioid and face its front toward
+them. Avoid the **−10 dB** pad for quiet, distant voices. Check performance from
+the actual speaking position before relying on it; room echo and noise matter.
+
+Optional GTCRN speech enhancement can be installed with
+`python install_listening_models.py --with-enhancement`, then enabled with
+`SPEECH_ENHANCEMENT=true`. It only processes the speech branch; sound labels always
+use the original audio. It is off by default because it made the quiet-speech
+benchmark worse and nearly doubled processing time on the deployed Pi 4.
+
+On the deployed 4 GB Raspberry Pi 4, the tested speech-plus-sound pipeline ran at
+approximately **0.5 seconds of processing per second of audio**, using about
+**434 MB peak memory** in the evaluation process. Public speech, attenuated speech
+with added noise, barking, silence, and speech followed by barking were checked.
+These are sample checks, not a measured room-distance or accuracy guarantee.
+
+Model sources and APIs:
+[English speech model](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-transducer/zipformer-transducer-models.html#csukuangfj-sherpa-onnx-streaming-zipformer-en-2023-06-21-english),
+[sound classifier](https://k2-fsa.github.io/sherpa/onnx/audio-tagging/pretrained_models.html),
+[Go Mic pickup patterns](https://samsontech.com/products/microphones/usb-microphones/gomic/).
+
 ## Troubleshooting
 
 - **Some audio was missed:** the microphone reported an input-buffer overflow.

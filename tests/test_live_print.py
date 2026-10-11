@@ -255,6 +255,17 @@ class LiveRecordingTests(unittest.TestCase):
         self.assertEqual(self.result()['printed_count'], 0)
         self.print_text.assert_not_called()
 
+    def test_local_backend_sound_labels_use_the_existing_print_queue(self):
+        self.mic._listening_models = SimpleNamespace(create_recognizer=lambda rate:
+            self.vosk.KaldiRecognizer(None, rate))
+        self.start(cadence_seconds=1)
+        self.send(b'partial:[dog barking]')
+        wait_until(lambda: self.mic.live_status()['printed_count'] == 1)
+        self.mic.stop(self.session['id'])
+        result = self.result()
+        self.assertEqual(result['state'], 'done')
+        self.print_text.assert_called_once_with('[dog barking]')
+
     def test_input_overflow_continues_live_printing_without_replaying_a_ticket(self):
         self.start(cadence_seconds=1)
         self.send(b'partial:first ticket')

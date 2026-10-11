@@ -12,6 +12,7 @@ import time
 from flask import Blueprint, jsonify, request
 
 from live_print import LivePrintError, LivePrintQueue
+from listening_models import ListeningModelError, LocalListeningModels
 
 
 MAX_SECONDS = 30
@@ -31,11 +32,13 @@ class MicrophoneError(Exception):
 
 
 class Microphone:
-    def __init__(self, enabled=False, device="Samson", model_path="models/vosk-model-small-en-us-0.15", print_text=None):
+    def __init__(self, enabled=False, device="Samson", model_path="models/vosk-model-small-en-us-0.15", print_text=None,
+                 listening_models=None):
         self.enabled = enabled
         self.device = int(device) if str(device).isdigit() else device
         self.model_path = Path(model_path)
         self._model = None
+        self._listening_models = listening_models
         self._lock = threading.RLock()
         self._sessions = {}
         self._thread = None
@@ -161,13 +164,12 @@ class Microphone:
         try:
             try:
                 import sounddevice as sd
-                from vosk import Model, KaldiRecognizer
             except (ImportError, OSError) as exc:
                 raise MicrophoneError(
                     "Install requirements-microphone.txt and libportaudio2 on the Pi, then restart the app."
                 ) from exc
 
-            if not self.model_path.is_dir():
+            if self._listening_models is None and not self.model_path.is_dir():
                 raise MicrophoneError("Speech model is missing. Follow the model download step in MICROPHONE_SETUP.md.")
             try:
                 device_info = sd.query_devices(self.device, "input")
@@ -179,12 +181,19 @@ class Microphone:
                     "using python -m sounddevice."
                 ) from exc
 
-            if self._model is None:
-                self._model = Model(str(self.model_path))
+            if self._listening_models is not None:
+                recognizer = self._listening_models.create_recognizer(sample_rate)
+            else:
+                try:
+                    from vosk import Model, KaldiRecognizer
+                except (ImportError, OSError) as exc:
+                    raise MicrophoneError('Install requirements-microphone.txt on the Pi, then restart the app.') from exc
+                if self._model is None:
+                    self._model = Model(str(self.model_path))
+                recognizer = KaldiRecognizer(self._model, sample_rate)
             if session["stop"].is_set():
                 self._update(session, state="done")
                 return
-            recognizer = KaldiRecognizer(self._model, sample_rate)
             audio = queue.Queue(maxsize=AUDIO_QUEUE_BLOCKS)
             failed = threading.Event()
             stop = session["stop"]
@@ -281,7 +290,7 @@ class Microphone:
                 self._update(session, state="done")
         except Exception as exc:
             logger.warning("Microphone session stopped: %s", failure_reason or type(exc).__name__)
-            message = str(exc) if isinstance(exc, (MicrophoneError, LivePrintError)) else (
+            message = str(exc) if isinstance(exc, (MicrophoneError, LivePrintError, ListeningModelError)) else (
                 "Could not record or transcribe. Check the microphone, speech model, and Pi audio permissions."
             )
             self._update(session, state="error", error=message, stop_reason="error")
@@ -325,7 +334,9 @@ def create_microphone_blueprint(microphone, allowed_origins=(), test_mode=False)
     @api.get("")
     def config():
         return jsonify(success=True, enabled=microphone.enabled, connected=microphone.connected(),
-                       max_seconds=MAX_SECONDS, test_mode=test_mode)
+                       max_seconds=MAX_SECONDS, test_mode=test_mode,
+                       recognition_backend='sherpa' if microphone._listening_models else 'vosk',
+                       sound_labels=bool(microphone._listening_models))
 
     @api.post("/start")
     def start():
@@ -365,9 +376,18 @@ def create_microphone_blueprint(microphone, allowed_origins=(), test_mode=False)
 
 
 def microphone_from_environment(print_text=None):
+    backend = os.getenv('MICROPHONE_BACKEND', 'vosk').lower()
+    if backend not in ('vosk', 'sherpa'):
+        raise ValueError('MICROPHONE_BACKEND must be vosk or sherpa.')
+    models = LocalListeningModels(
+        os.getenv('LISTENING_MODELS_PATH', str(Path(__file__).parent / 'models')),
+        enhance_speech=os.getenv('SPEECH_ENHANCEMENT', 'false').lower() == 'true',
+        sound_threshold=float(os.getenv('SOUND_EVENT_THRESHOLD', '0.6')),
+    ) if backend == 'sherpa' else None
     return Microphone(
         enabled=os.getenv("MICROPHONE_ENABLED", "false").lower() == "true",
         device=os.getenv("MICROPHONE_DEVICE", "Samson"),
         model_path=os.getenv("VOSK_MODEL_PATH", str(Path(__file__).parent / "models/vosk-model-small-en-us-0.15")),
         print_text=print_text,
+        listening_models=models,
     )

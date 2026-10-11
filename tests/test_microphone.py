@@ -170,6 +170,26 @@ class RecordingTests(unittest.TestCase):
         self.assertIn('MICROPHONE_DEVICE', result['error'])
         self.sd.RawInputStream.assert_not_called()
 
+    def test_local_backend_uses_native_audio_without_requiring_the_vosk_model(self):
+        factory = Mock(return_value=self.vosk.KaldiRecognizer.return_value)
+        self.mic._listening_models = SimpleNamespace(create_recognizer=factory)
+        self.mic.model_path = self.mic.model_path / 'unused-vosk-model'
+        with patch.dict('sys.modules', vosk=None), patch('microphone.MAX_SECONDS', .03):
+            result = self.result(self.mic.start())
+        self.assertEqual(result['state'], 'done')
+        self.assertEqual(result['text'], 'hello printer')
+        factory.assert_called_once_with(48000)
+        self.assertTrue(self.closed.is_set())
+
+    def test_local_model_setup_failure_releases_the_microphone(self):
+        from listening_models import ListeningModelError
+        self.mic._listening_models = SimpleNamespace(create_recognizer=Mock(
+            side_effect=ListeningModelError('Install local listening models.')))
+        result = self.result(self.mic.start())
+        self.assertEqual(result['state'], 'error')
+        self.assertEqual(result['error'], 'Install local listening models.')
+        self.sd.RawInputStream.assert_not_called()
+
     def test_missing_model_does_not_open_stream(self):
         self.mic.model_path = self.mic.model_path / 'missing'
         result = self.result(self.mic.start())
