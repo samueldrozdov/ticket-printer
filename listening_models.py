@@ -152,6 +152,12 @@ class LocalRecognizer:
         # Skip digital silence; do not amplify quiet background noise into events.
         predictions = []
         if float(self.np.max(self.np.abs(samples))) >= 0.0001:
+            # Stop can leave only a few milliseconds in the final sound window.
+            # The tagger's convolution needs a full input window; silence-pad
+            # that tail without changing the audio sent to speech recognition.
+            window_frames = int(self.sample_rate * SOUND_WINDOW_SECONDS)
+            if len(samples) < window_frames:
+                samples = self.np.pad(samples, (0, window_frames - len(samples)))
             stream = self.tagger.create_stream()
             stream.accept_waveform(self.sample_rate, samples)
             predictions = [(event.name, event.prob) for event in self.tagger.compute(stream)]

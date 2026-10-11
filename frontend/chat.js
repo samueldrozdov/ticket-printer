@@ -715,7 +715,7 @@
     form.addEventListener('submit', sendMessage);
     input.addEventListener('input', updateComposer);
     input.addEventListener('keydown', event => {
-        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && window.matchMedia('(pointer: fine)').matches) {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
             event.preventDefault();
             form.requestSubmit();
         }

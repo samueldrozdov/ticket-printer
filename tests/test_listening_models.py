@@ -121,6 +121,27 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(json.loads(recognizer.FinalResult())['text'], '')
         self.assertEqual(self.sound_chunks, [])
 
+    def test_short_final_sound_windows_are_padded_without_changing_speech_input(self):
+        self.speech = 'Words already recognized'
+        for rate in (16000, 44100, 48000):
+            for duration in (.001, .025, .091, .9):
+                with self.subTest(rate=rate, duration=duration):
+                    self.asr_chunks.clear()
+                    self.sound_chunks.clear()
+                    recognizer = LocalRecognizer(self.models, rate)
+                    data = self.audio(duration, rate)
+                    recognizer.AcceptWaveform(data)
+                    result = json.loads(recognizer.FinalResult())['text']
+                    self.assertIn('words already recognized', result)
+                    self.assertEqual(len(self.sound_chunks), 1)
+                    sound = self.sound_chunks[0][1]
+                    frames = len(data) // 2
+                    self.assertEqual(len(sound), rate * 2)
+                    np.testing.assert_array_equal(sound[:frames], self.asr_chunks[0][1])
+                    self.assertTrue(np.all(sound[frames:] == 0))
+                    recognizer.FinalResult()
+                    self.assertEqual(len(self.sound_chunks), 1)
+
     def test_missing_weights_are_actionable(self):
         with tempfile.TemporaryDirectory() as directory:
             models = LocalListeningModels(directory)

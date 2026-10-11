@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Pad incomplete sound-classification windows when recording stops so very short
+  audio tails cannot interrupt finalization or discard recognized speech.
 - Feed trailing blank paper with compact ESC/POS commands instead of slow raster
   transfers, preserving the preview and selected margin.
 - Wait for a busy printer before sending the next message, and distinguish

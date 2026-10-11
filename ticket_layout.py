@@ -12,6 +12,7 @@ from ble_printer import IMAGE_MAX_WIDTH, encode_raster, prepare_thermal_image
 
 CELL_WIDTH = 12
 LINE_HEIGHT = 24
+STANDARD_SEPARATOR = '-' * 32
 DEFAULT_FEED_LINES = 6
 MAX_FEED_LINES = 12
 DEFAULT_FONT_FAMILY = 'mono'
@@ -68,8 +69,19 @@ def validate_feed_lines(feed_lines):
     return feed_lines
 
 
+def render_separator(width):
+    """Render the standard dashed separator as one fixed-size row."""
+    separator = Image.new('1', (width, LINE_HEIGHT), 1)
+    draw = ImageDraw.Draw(separator)
+    font = ticket_font()
+    for column, char in enumerate(STANDARD_SEPARATOR[:width // CELL_WIDTH]):
+        draw.text((column * CELL_WIDTH, 0), char, font=font, fill=0, anchor='la')
+    return separator
+
+
 def render_ticket(text, photo=None, feed_lines=DEFAULT_FEED_LINES,
-                  font_family=DEFAULT_FONT_FAMILY, font_size=DEFAULT_FONT_SIZE):
+                  font_family=DEFAULT_FONT_FAMILY, font_size=DEFAULT_FONT_SIZE,
+                  include_separator=False):
     """Return the full 1-bit ticket, with no height limit on text."""
     width = IMAGE_MAX_WIDTH
     if width < CELL_WIDTH or width % 8:
@@ -80,18 +92,23 @@ def render_ticket(text, photo=None, feed_lines=DEFAULT_FEED_LINES,
     line_height = math.ceil(LINE_HEIGHT * font.size / FONT_SIZES[DEFAULT_FONT_SIZE])
     lines = ticket_lines(text, width, cell_width, font if font_family != 'mono' else None)
     photo = prepare_thermal_image(photo, max_width=width) if photo is not None else None
-    text_height = len(lines) * line_height
+    separator = render_separator(width) if include_separator else None
+    text_top = separator.height if separator is not None else 0
+    text_height = text_top + len(lines) * line_height
     height = text_height + (photo.height if photo is not None else 0) + validate_feed_lines(feed_lines) * LINE_HEIGHT
     ticket = Image.new('1', (width, height), 1)
+    if separator is not None:
+        ticket.paste(separator, (0, 0))
     draw = ImageDraw.Draw(ticket)
     for row, line in enumerate(lines):
+        top = text_top + row * line_height
         if font_family == 'mono':
             for column, char in enumerate(line):
-                draw.text((column * cell_width, row * line_height), char,
+                draw.text((column * cell_width, top), char,
                           font=font, fill=0, anchor='la')
         else:
             left = font.getbbox(line)[0]
-            draw.text((max(0, -left), row * line_height), line, font=font, fill=0, anchor='la')
+            draw.text((max(0, -left), top), line, font=font, fill=0, anchor='la')
     if photo is not None:
         ticket.paste(photo, ((width - photo.width) // 2, text_height))
     return ticket

@@ -8,7 +8,7 @@ const { AudioMeter } = require('../frontend/audio-meter.js');
 const source = fs.readFileSync(require.resolve('../frontend/chat.js'), 'utf8');
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null, microphoneEnabled = false } = {}) {
+async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null, microphoneEnabled = false, finePointer = true } = {}) {
     const nodes = new Map(), requests = [], audioPolls = [];
     let listener;
     const document = {
@@ -80,7 +80,7 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
                 }
                 refresh() {}
             },
-            addEventListener() {}, matchMedia: () => ({ matches: true })
+            addEventListener() {}, matchMedia: () => ({ matches: finePointer })
         },
         sessionStorage: { getItem() { return rememberedId; }, setItem() {}, removeItem() {} },
         setTimeout: (callback, delay) => {
@@ -315,6 +315,30 @@ test('review recording updates audio independently of words and clears when fini
     await f.audioPolls.shift()();
     assert.equal(f.byId('messageInput').value, 'Recorded words');
     assert.equal(f.byId('recording').hidden, true);
+});
+
+test('Enter sends regardless of pointer type while Shift+Enter and composition keep the draft', async () => {
+    for (const finePointer of [true, false]) {
+        const f = await fixture({ finePointer });
+        f.type('Keyboard ticket');
+        const input = f.byId('messageInput');
+        for (const modifiers of [{ shiftKey: true }, { isComposing: true }]) {
+            input.events.keydown({ key: 'Enter', ...modifiers,
+                preventDefault() { assert.fail('Newlines and composition must retain native behavior'); } });
+            await settle();
+            assert.equal(input.value, 'Keyboard ticket');
+            assert.equal(f.requests.length, 0);
+        }
+        let prevented = false;
+        input.events.keydown({ key: 'Enter', preventDefault() { prevented = true; } });
+        await settle();
+        assert.equal(prevented, true);
+        assert.equal(input.value, '');
+        assert.equal(f.requests.length, 1);
+        assert.equal(f.requests[0].body.content, 'Keyboard ticket');
+        f.requests[0].succeed();
+        await settle();
+    }
 });
 
 test('Send clears and focuses immediately, with back-to-back messages printed in order', async () => {

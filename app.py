@@ -24,7 +24,7 @@ load_dotenv()
 
 from ble_printer import ble_print_text, ble_print_text_with_image, ble_is_available, process_image_base64
 from ble_printer import ble_print_raster_ticket
-from ticket_layout import (DEFAULT_FEED_LINES, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE,
+from ticket_layout import (DEFAULT_FEED_LINES, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, STANDARD_SEPARATOR,
                            render_ticket, ticket_payload, ticket_preview, validate_feed_lines, validate_typography)
 from microphone import create_microphone_blueprint, microphone_from_environment
 from remote_access import configure_remote_access
@@ -143,7 +143,7 @@ def build_print_content(content: str, include_separator: bool = True, include_da
     lines = []
     
     if include_separator:
-        lines.append("--------------------------------")
+        lines.append(STANDARD_SEPARATOR)
     
     if include_date:
         lines.append(format_date_string())
@@ -392,9 +392,11 @@ def print_content():
 
         # Build the timestamp and layout exactly once. The response contains the
         # same pixels sent to the printer, including wrapped text and processed photos.
-        text = build_print_content(content if print_type == "text" else caption, include_date=include_date)
+        text = build_print_content(content if print_type == "text" else caption,
+                                   include_separator=False, include_date=include_date)
         ticket = render_ticket(text, processed_image, feed_lines=feed_lines,
-                               font_family=font_family, font_size=font_size)
+                               font_family=font_family, font_size=font_size, include_separator=True)
+        text = STANDARD_SEPARATOR + '\n' + text
         preview = ticket_preview(ticket, text)
         payload = ticket_payload(ticket)
 

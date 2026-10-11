@@ -44,14 +44,23 @@ test('opening the site restores saved content, status and ticket previews withou
     await f.ready;
     const rows = f.byId('historyEntries').children;
     assert.equal(rows.length, 4);
-    assert.equal(rows[0].children[1].textContent, injection);
-    assert.equal(rows[0].children[1].innerHTML, undefined);
-    assert.equal(rows[0].children.at(-1).textContent, 'Printed');
-    assert.match(rows[1].children.at(-1).textContent, /no paper printed/);
-    assert.equal(rows[1].children[2].className, 'paper-ticket');
-    assert.equal(rows[1].children[2].children[0].src, 'data:image/png;base64,photo');
-    assert.equal(rows[2].children.at(-1).textContent, 'Print not confirmed');
-    assert.equal(rows[3].children.at(-1).textContent, 'Print not confirmed');
+    const sent = rows.map(row => row.children[0]);
+    assert.ok(sent.every(message => message.className === 'message outgoing'));
+    assert.equal(sent[0].children[0].textContent, injection);
+    assert.equal(sent[0].children[0].innerHTML, undefined);
+    const timestamp = entry(1).created_at;
+    const time = new Date(timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    assert.equal(sent[0].children.length, 2);
+    assert.equal(sent[0].children.at(-1).textContent, `Printed · ${time}`);
+    assert.equal(sent[0].children.at(-1).dateTime, timestamp);
+    assert.equal(sent[0].children.at(-1).title, new Date(timestamp).toLocaleString());
+    assert.equal(sent[1].children.at(-1).textContent, `Test preview · no paper printed · ${time}`);
+    const received = rows[1].children[1];
+    assert.equal(received.className, 'message incoming');
+    assert.equal(received.children[0].className, 'paper-ticket');
+    assert.equal(received.children[0].children[0].src, 'data:image/png;base64,photo');
+    assert.equal(sent[2].children.at(-1).textContent, `Print not confirmed · ${time}`);
+    assert.equal(sent[3].children.at(-1).textContent, `Print not confirmed · ${time}`);
     assert.equal(f.window.SamsonHistory.has(2), true);
     assert.equal(f.byId('historyMore').hidden, true);
     assert.equal(f.byId('historyNotice').hidden, true);
@@ -69,7 +78,7 @@ test('older pages are prepended chronologically and existing IDs are not duplica
     assert.equal(f.byId('historyMore').hidden, false);
     await f.byId('historyMore').events.click();
     assert.equal(f.requests[1].url, 'https://samson.test/history?before=3');
-    assert.deepEqual(f.byId('historyEntries').children.map(row => row.children[1].textContent),
+    assert.deepEqual(f.byId('historyEntries').children.map(row => row.children[0].children[0].textContent),
         ['Ticket 1', 'Ticket 2', 'Ticket 3', 'Ticket 4']);
     assert.equal(f.byId('historyMore').hidden, true);
 });

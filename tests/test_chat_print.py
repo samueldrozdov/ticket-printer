@@ -204,6 +204,7 @@ class ChatPrintTests(unittest.TestCase):
             self.assertIn('TIMESTAMP', transport.call_args.args[1])
 
     def test_font_choices_match_the_printer_and_saved_preview_for_text_and_photos(self):
+        standard_separator = render_ticket('-' * 32, feed_lines=0)
         for transport_type in ['usb', 'ble']:
             for family in ['mono', 'sans', 'serif']:
                 for size in ['small', 'medium', 'large']:
@@ -218,6 +219,14 @@ class ChatPrintTests(unittest.TestCase):
                             self.assertEqual(response.status_code, 200)
                             payload = bluetooth.call_args.args[1] if transport_type == 'ble' else device.return_value._raw.call_args.args[0]
                             self.assert_preview_matches_print(response, payload)
+                            preview = preview_image(response)
+                            self.assertEqual(preview.crop((0, 0, preview.width, 24)).tobytes(),
+                                             standard_separator.tobytes())
+                            body = render_ticket(response.json['preview']['text'].split('\n', 1)[1],
+                                                 font_family=family, font_size=size, feed_lines=0)
+                            # Both message text and photo captions start immediately after one separator row.
+                            self.assertEqual(preview.crop((0, 24, preview.width, 24 + body.height)).tobytes(),
+                                             body.tobytes())
                             saved = self.client.get('/history?limit=1').json['entries'][0]
                             self.assertEqual(saved['preview'], response.json['preview'])
 

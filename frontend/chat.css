@@ -96,9 +96,7 @@ h1, h2, p { margin: 0; }
 .history-retry:hover:not(:disabled) { text-decoration: underline; }
 .history-more { display: block; margin: 0 auto 20px; padding: 12px 18px; border-radius: 20px; background: var(--subtle); color: var(--blue); font-size: 12px; }
 .history-entries { display: flex; flex-direction: column; gap: 24px; }
-.history-entry { gap: 8px; }
-.history-entry .paper-ticket { margin-bottom: 0; }
-.history-entry time { display: block; font-size: 11px; color: var(--muted); }
+.history-entry { display: flex; flex-direction: column; gap: 18px; }
 .message-image { display: block; max-width: 100%; width: 240px; max-height: 280px; object-fit: contain; border-radius: 17px; background: var(--subtle); }
 .error-message .bubble { background: light-dark(#fff2f3, #39272b); color: var(--red); }
 .print-confirmation { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); padding: 2px 4px; }

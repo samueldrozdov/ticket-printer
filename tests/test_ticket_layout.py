@@ -40,6 +40,23 @@ class TicketLayoutTests(unittest.TestCase):
             renders.append(images[1].tobytes())
         self.assertEqual(len(set(renders)), 3)
 
+    def test_separator_is_one_standard_row_independent_of_message_typography(self):
+        standard = render_ticket('-' * 32, feed_lines=0)
+        self.assertEqual(standard.size, (384, 24))
+        # Dashes in the user's message still follow the selected typography.
+        text = 'A message\n' + '-' * 32
+        for family in ['mono', 'sans', 'serif']:
+            for size in ['small', 'medium', 'large']:
+                for photo in [None, Image.new('RGB', (100, 50), 'black')]:
+                    with self.subTest(family=family, size=size, photo=photo is not None):
+                        body = render_ticket(text, photo, font_family=family, font_size=size)
+                        ticket = render_ticket(text, photo, font_family=family, font_size=size,
+                                               include_separator=True)
+                        self.assertEqual(ticket.size, (body.width, body.height + 24))
+                        self.assertEqual(ticket.crop((0, 0, ticket.width, 24)).tobytes(), standard.tobytes())
+                        self.assertEqual(ticket.crop((0, 24, ticket.width, ticket.height)).tobytes(),
+                                         body.tobytes())
+
     def test_narrow_and_tall_photos_still_have_at_least_one_pixel(self):
         image = ble_printer.prepare_thermal_image(Image.new('RGB', (1, 1600)))
         self.assertEqual(image.size, (1, 800))

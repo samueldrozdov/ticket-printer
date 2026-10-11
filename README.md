@@ -61,7 +61,8 @@ The **Font** selector offers Monospace (the original font), Sans, and Serif.
 **Font size** offers S, M (the original size), and L. These settings are also
 saved per browser and server, and apply to sent messages and photo captions.
 Long text wraps to fit the paper; ticket previews and history preserve the
-printed font and size. Additional fonts and their license are bundled in `fonts/`.
+printed font and size. The dashed separator stays at its original size on one
+row for every font choice. Additional fonts and their license are bundled in `fonts/`.
 
 The website loads saved print history automatically when opened, including chat
 tickets, photos, and **Passive Listening** output. Use **Load older tickets** to browse
@@ -233,7 +234,7 @@ sudo systemctl status ticket-printer
 ## Usage
 
 1. Run the root `app.py` and open `http://[YOUR_PI_IP]:5000`.
-2. Type in **Message Samson** and click the blue send arrow. On desktop, Enter sends;
+2. Type in **Message Samson** and click the blue send arrow. Enter sends;
    Shift+Enter adds a new line.
 3. Use **+** to add a **Photo**, **Vocab Word**, or **Random Meme**. Vocab Word adds
    a random word and its definition; Random Meme attaches a random meme image.
