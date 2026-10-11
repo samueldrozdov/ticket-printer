@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Reuse an existing BlueZ printer connection when the connected printer stops
+  advertising, and wait briefly when a status check rejects a new print before it starts.
 - Respect Bluetooth packet limits, time out stalled writes, and stop stuck
   Bluetooth processes so printing can recover without restarting the website.
 - Describe HTML gateway failures as connection errors while preserving the

@@ -62,7 +62,7 @@
         window.SamsonSettings.setApiReachable(connected);
     }
 
-    async function api(path, { method = 'GET', body, timeout = 10000 } = {}) {
+    async function api(path, { method = 'GET', body, timeout = 10000, checkWaits = 0 } = {}) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout);
         try {
@@ -84,6 +84,14 @@
                 throw new Error('Samson returned an unreadable reply. Reload the page before trying again.');
             }
             setConnected(true);
+            // This exact rejection proves printing has not started. Wait out a
+            // short health check; never retry an ambiguous or failed print.
+            if (path === '/print' && response.status === 503 && data.success === false &&
+                data.printer_state === 'checking' && checkWaits < 10) {
+                clearTimeout(timer);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                return api(path, { method, body, timeout, checkWaits: checkWaits + 1 });
+            }
             if (!response.ok || data.success === false) {
                 const error = new Error(data.error || 'Samson couldn’t complete that request.');
                 error.reachable = true;
@@ -220,7 +228,7 @@
     async function printMessage(body, image, status) {
         status.textContent = 'Printing…';
         try {
-            // Never retry a print automatically: a lost response can still mean paper printed.
+            // Only a pre-print "checking" rejection may wait and try admission again.
             const data = await api('/print', { method: 'POST', body, timeout: 120000 });
             if (data.success !== true) throw new Error('Samson did not confirm the print.');
             window.SamsonHistory?.markCurrent(data.history_id);

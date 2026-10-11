@@ -9,6 +9,7 @@ import sys
 from typing import Optional
 
 from bleak import BleakClient, BleakScanner
+from bleak.backends.device import BLEDevice
 from PIL import Image
 from printer_worker import timeout_setting
 
@@ -167,10 +168,37 @@ def process_image_base64(image_base64: str, max_width: int = 384) -> Optional[Im
         return None
 
 
+async def _connected_bluez_device(addr):
+    """A connected peripheral may no longer advertise; use BlueZ's live device."""
+    from dbus_fast import BusType, Message
+    from dbus_fast.aio import MessageBus
+
+    bus = MessageBus(bus_type=BusType.SYSTEM)
+    try:
+        await asyncio.wait_for(bus.connect(), 1)
+        reply = await asyncio.wait_for(bus.call(Message(
+            destination='org.bluez', path='/', interface='org.freedesktop.DBus.ObjectManager',
+            member='GetManagedObjects')), 1)
+        for path, interfaces in reply.body[0].items():
+            properties = {key: value.value for key, value in interfaces.get('org.bluez.Device1', {}).items()}
+            if properties.get('Address', '').upper() == addr.upper() and properties.get('Connected'):
+                return BLEDevice(properties['Address'], properties.get('Name'),
+                                 {'path': path, 'props': properties})
+    finally:
+        bus.disconnect()
+
+
 async def _find_device_by_address(addr: str, timeout: float = None):
     if timeout is None:
         timeout = BLE_SCAN_TIMEOUT
     addr = addr.upper()
+    if sys.platform == 'linux':
+        try:
+            connected = await _connected_bluez_device(addr)
+            if connected is not None:
+                return connected
+        except Exception:
+            logger.warning('Could not read the existing Bluetooth connection; scanning instead')
 
     def matcher(d, _ad):
         return (d.address or "").upper() == addr

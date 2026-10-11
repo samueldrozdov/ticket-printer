@@ -3,10 +3,43 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 import ble_printer as ble
+
+
+class BluetoothDiscoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_connected_bluez_device_can_be_used_without_an_advertisement(self):
+        properties = {'Address': SimpleNamespace(value='AA:BB'), 'Name': SimpleNamespace(value='Printer'),
+                      'Connected': SimpleNamespace(value=True)}
+        bus = Mock()
+        bus.connect = AsyncMock()
+        bus.call = AsyncMock(return_value=SimpleNamespace(body=[{
+            '/org/bluez/hci0/dev_AA_BB': {'org.bluez.Device1': properties}}]))
+        modules = {'dbus_fast': SimpleNamespace(BusType=SimpleNamespace(SYSTEM=1), Message=Mock()),
+                   'dbus_fast.aio': SimpleNamespace(MessageBus=Mock(return_value=bus))}
+        with patch.dict(sys.modules, modules):
+            device = await ble._connected_bluez_device('aa:bb')
+        self.assertEqual(device.address, 'AA:BB')
+        self.assertEqual(device.details['path'], '/org/bluez/hci0/dev_AA_BB')
+        self.assertTrue(device.details['props']['Connected'])
+        bus.disconnect.assert_called_once()
+
+    async def test_existing_connection_skips_scanning_and_missing_connection_falls_back(self):
+        connected = object()
+        advertised = object()
+        with patch.object(ble.sys, 'platform', 'linux'), \
+                patch.object(ble, '_connected_bluez_device', new_callable=AsyncMock) as cache, \
+                patch.object(ble.BleakScanner, 'find_device_by_filter', new_callable=AsyncMock) as scan:
+            cache.return_value = connected
+            self.assertIs(await ble._find_device_by_address('aa:bb'), connected)
+            scan.assert_not_awaited()
+            cache.return_value = None
+            scan.return_value = advertised
+            self.assertIs(await ble._find_device_by_address('aa:bb'), advertised)
+            scan.assert_awaited_once()
 
 
 class BluetoothPacketTests(unittest.IsolatedAsyncioTestCase):

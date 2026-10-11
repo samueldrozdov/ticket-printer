@@ -141,6 +141,9 @@ backed up alongside the app, and the normal `bluetooth.service` remains enabled.
   This releases Bluetooth access for a later request without restarting the
   app. Packets are capped to the negotiated connection size, and no write is
   retried once sending starts, even if its first acknowledgement is lost.
+  Existing BlueZ connections are reused without requiring a new advertisement.
+  The chat waits up to five seconds to retry admission only when the server
+  explicitly reports that a connection check prevented the print from starting.
   Check the paper before resending an unconfirmed ticket. Other printer
   drivers may still need `sudo systemctl restart ticket-printer` if they never
   return; this keeps the tunnel URL. A live-listening queue stops on a rejected

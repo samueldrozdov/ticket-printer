@@ -66,7 +66,7 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
             addEventListener() {}, matchMedia: () => ({ matches: true })
         },
         sessionStorage: { getItem() { return rememberedId; }, setItem() {}, removeItem() {} },
-        setTimeout: () => 1, clearTimeout() {},
+        setTimeout: (callback, delay) => { if (delay === 500) setImmediate(callback); return 1; }, clearTimeout() {},
         FileReader: class {
             readAsDataURL(file) { this.result = file.data; this.onload(); }
         },
@@ -120,6 +120,34 @@ test('an HTML gateway timeout preserves the message without blaming the API addr
     assert.match(reply.children[0].textContent, /connection to Samson timed out \(HTTP 504\)/);
     assert.doesNotMatch(reply.children[0].textContent, /API address/);
     assert.equal(f.outgoing()[0].children[0].textContent, 'Keep this ticket');
+    assert.match(f.outgoing()[0].children.at(-1).textContent, /not confirmed/i);
+});
+
+test('Send waits through a health check that explicitly rejected admission, then prints once', async () => {
+    const f = await fixture();
+    f.type('One ticket');
+    f.send();
+    await settle();
+    f.requests[0].respond({ ok: false, status: 503,
+        json: async () => ({ success: false, printer_state: 'checking' }) });
+    await settle(); await settle();
+    assert.equal(f.requests.length, 2);
+    assert.deepEqual(f.requests[0].body, f.requests[1].body);
+    f.requests[1].succeed();
+    await settle();
+    assert.equal(f.outgoing().length, 1);
+    assert.match(f.outgoing()[0].children.at(-1).textContent, /Logged in test mode/);
+});
+
+test('an actual printer failure is never retried even when it returns 503', async () => {
+    const f = await fixture();
+    f.type('Unconfirmed ticket');
+    f.send();
+    await settle();
+    f.requests[0].respond({ ok: false, status: 503,
+        json: async () => ({ success: false, printer_state: 'unavailable', error: 'No acknowledgement' }) });
+    await settle(); await settle();
+    assert.equal(f.requests.length, 1);
     assert.match(f.outgoing()[0].children.at(-1).textContent, /not confirmed/i);
 });
 
