@@ -61,7 +61,7 @@
         catch { /* Keep the default if storage is disabled. */ }
         return { get value() { return value; }, update };
     }
-    const fontPreference = preference(fontStorageKey, 'mono', ['mono', 'sans', 'serif'], value => { fontFamily.value = value; });
+    const fontPreference = preference(fontStorageKey, 'sans', ['mono', 'sans', 'serif'], value => { fontFamily.value = value; });
     const fontSizePreference = preference(fontSizeStorageKey, 'medium', ['small', 'medium', 'large'], value => {
         fontSizeOptions.forEach(([input, size]) => { input.checked = size === value; });
     });
@@ -76,7 +76,6 @@
             else if (apiReachable === false) refreshConnections(true);
         }
     };
-    byId('serverAddress').textContent = endpoint.host;
     toggle.addEventListener('change', () => {
         try { localStorage.setItem(storageKey, String(toggle.checked)); }
         catch { /* Keep the in-memory preference. */ }
@@ -99,6 +98,14 @@
         const row = byId(id);
         row.dataset.state = state;
         row.textContent = label;
+    }
+
+    function metadata(id, name, connected, detail) {
+        const item = byId(id);
+        item.dataset.state = connected ? 'active' : 'offline';
+        item.textContent = name;
+        item.setAttribute('aria-label', `${name}: ${detail}`);
+        item.title = `${name}: ${detail}`;
     }
 
     function updateAvatar() {
@@ -192,6 +199,13 @@
             else if (data.connected === false) status('microphoneConnection', 'warning', 'Unavailable');
             else status('microphoneConnection', 'idle', 'Unknown');
         } else status('microphoneConnection', 'offline', 'Unavailable');
+        metadata('piMetadata', byId('serverLabel').textContent, apiReachable,
+            byId('piConnection').textContent);
+        metadata('printerMetadata', 'Printer', lastHealth?.printer_connected === true && !lastHealth.test_mode,
+            byId('printerConnection').textContent);
+        metadata('microphoneMetadata', 'Mic', microphone.status === 'fulfilled' &&
+            microphone.value.enabled && microphone.value.connected === true,
+            byId('microphoneConnection').textContent);
         checking = false;
         updateAvatar();
         refreshButton.disabled = false;

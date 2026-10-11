@@ -8,7 +8,7 @@ const { AudioMeter } = require('../frontend/audio-meter.js');
 const source = fs.readFileSync(require.resolve('../frontend/chat.js'), 'utf8');
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null, microphoneEnabled = false, finePointer = true } = {}) {
+async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null, microphoneEnabled = false, finePointer = true, random = Math.random } = {}) {
     const nodes = new Map(), requests = [], audioPolls = [];
     let listener;
     const document = {
@@ -40,6 +40,7 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
                 children.forEach(child => { child.parentNode = this; });
                 this.children.push(...children);
             },
+            contains(node) { return node === this || this.children.some(child => child.contains(node)); },
             querySelector(selector) { return this.children.find(child => child.className.split(' ').includes(selector.slice(1))); },
             remove() {
                 if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1);
@@ -68,7 +69,7 @@ async function fixture({ contentFetch, memeFetch, liveFetch, rememberedId = null
     const settings = { includeDate: true, feedLines: 3, fontFamily: 'mono', fontSize: 'medium', setApiReachable() {} };
     byId('stopListening').querySelector = () => byId('stopListeningLabel');
     vm.runInNewContext(source, {
-        document, AbortController,
+        document, AbortController, Math: Object.assign(Object.create(Math), { random }),
         window: {
             PRINTER_API_URL: 'http://samson.test', SamsonSettings: settings,
             AudioMeter: class extends AudioMeter {
@@ -264,6 +265,97 @@ test('a remembered listening session still displays the connection warning on an
     assert.equal(f.byId('listeningBar').hidden, false);
     assert.equal(f.byId('listeningLabel').textContent, 'Connection lost');
     assert.match(f.byId('listeningWarning').textContent, /may still be listening/);
+    assert.equal(f.byId('messageForm').hidden, true);
+    assert.equal(f.byId('sendButton').disabled, true);
+});
+
+test('Passive Listening blocks all composer actions until confirmed finished and preserves the draft', async () => {
+    let offline = false;
+    let session = { id: null, state: 'idle' };
+    const f = await fixture({ microphoneEnabled: true, liveFetch: async () => {
+        if (offline) throw new Error('Offline');
+        return { ok: true, json: async () => session };
+    } });
+    const form = f.byId('messageForm');
+    const input = f.byId('messageInput');
+    form.append(input);
+    f.type('Saved caption');
+    await f.attach('saved.png');
+    assert.equal(form.hidden, false);
+    session = { id: 'composer-session', mode: 'live', state: 'recording', seconds: 1,
+        cadence_seconds: 10, text: '', printing: null };
+    await f.listener.refresh();
+    assert.equal(f.document.activeElement, f.byId('stopListening'));
+
+    async function assertBlocked() {
+        assert.equal(form.hidden, true);
+        assert.equal(input.readOnly, true);
+        for (const id of ['sendButton', 'plusButton', 'microphoneButton', 'imageInput', 'removeImageButton']) {
+            assert.equal(f.byId(id).disabled, true, `${id} must be disabled`);
+        }
+        f.send();
+        input.events.keydown({ key: 'Enter', preventDefault() {} });
+        await f.attach('blocked.png');
+        for (const id of ['plusButton', 'photoButton', 'vocabButton', 'quoteButton', 'memeButton', 'removeImageButton', 'microphoneButton']) {
+            await f.byId(id).events.click();
+        }
+        await settle();
+        assert.equal(f.byId('addMenu').hidden, true);
+        assert.equal(f.byId('listenSettings').hidden, true);
+        assert.equal(input.value, 'Saved caption');
+        assert.equal(f.byId('imagePreview').alt, 'saved.png');
+        assert.equal(f.requests.length, 0);
+        assert.equal(f.outgoing().length, 0);
+    }
+
+    await assertBlocked();
+    assert.equal(f.byId('stopListening').disabled, false);
+    offline = true;
+    await f.listener.refresh();
+    f.byId('stopListening').events.click();
+    await settle();
+    await assertBlocked();
+    offline = false;
+    session = { ...session, state: 'stopping' };
+    await f.listener.refresh();
+    await assertBlocked();
+    session = { ...session, state: 'error', printing: { id: 1, state: 'printing', text: 'Still printing' } };
+    await f.listener.refresh();
+    await assertBlocked();
+    session = { ...session, state: 'done', printing: null, text: 'Unprinted words' };
+    await f.listener.refresh();
+    assert.equal(form.hidden, false);
+    assert.equal(f.byId('listeningBar').hidden, true);
+    assert.equal(f.document.activeElement, input);
+    assert.equal(input.value, 'Saved caption\nUnprinted words');
+    assert.equal(f.byId('sendButton').disabled, false);
+    f.send();
+    await settle();
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.requests[0].body.caption, 'Saved caption\nUnprinted words');
+    assert.equal(f.requests[0].body.content, 'data:image/png;base64,saved.png');
+    f.requests[0].succeed();
+    await settle();
+});
+
+test('starting Passive Listening hides the composer immediately and restores it after a rejected start', async () => {
+    let replyToStart;
+    const f = await fixture({ liveFetch: async path => {
+        if (path.endsWith('/start')) return new Promise(resolve => { replyToStart = resolve; });
+        return { ok: true, json: async () => ({ id: null, state: 'idle' }) };
+    } });
+    f.type('Keep this draft');
+    const starting = f.listener.start({ cadence_seconds: 10 });
+    assert.equal(f.byId('messageForm').hidden, true);
+    assert.equal(f.byId('listeningBar').hidden, false);
+    f.send();
+    await settle();
+    assert.equal(f.requests.length, 0);
+    replyToStart({ ok: false, status: 400, json: async () => ({ success: false, error: 'Could not start.' }) });
+    assert.equal(await starting, false);
+    assert.equal(f.byId('messageForm').hidden, false);
+    assert.equal(f.byId('messageInput').value, 'Keep this draft');
+    assert.equal(f.byId('sendButton').disabled, false);
 });
 
 test('Passive Listening shows incoming sound, quiet and offline states, then clears on Stop', async () => {
@@ -490,7 +582,7 @@ test('meme failure preserves the existing caption and photo and unlocks the comp
         assert.equal(f.byId('plusButton').disabled, false);
         assert.equal(f.byId('sendButton').disabled, false);
         assert.equal(f.requests.length, 0);
-        assert.match(f.byId('liveStatus').textContent, /draft is kept/);
+        assert.equal(f.byId('liveStatus').textContent, 'Couldn’t load a random meme. Try again.');
     }
 });
 
@@ -505,6 +597,8 @@ test('meme loading ignores repeated taps and excludes the last successful image'
     } });
     const loading = f.byId('memeButton').events.click();
     await f.byId('memeButton').events.click();
+    await f.byId('quoteButton').events.click();
+    assert.equal(f.byId('messageInput').value, '');
     assert.equal(addresses.length, 1);
     assert.equal(f.byId('plusButton').disabled, true);
     finish();
@@ -514,6 +608,85 @@ test('meme loading ignores repeated taps and excludes the last successful image'
     finish();
     await next;
     assert.equal(f.requests.length, 0);
+});
+
+test('a random quote works without content requests and is reviewed and edited before printing', async () => {
+    const f = await fixture({ random: () => 0 });
+    f.type('A thought for today');
+    f.byId('plusButton').events.click();
+    f.byId('quoteButton').events.click();
+    const draft = f.byId('messageInput').value;
+    assert.equal(draft, 'A thought for today\n\n“Nothing great was ever achieved without enthusiasm.”\n— Ralph Waldo Emerson');
+    assert.equal(f.byId('addMenu').hidden, true);
+    assert.equal(f.byId('plusButton')['aria-expanded'], 'false');
+    assert.equal(f.document.activeElement, f.byId('messageInput'));
+    assert.equal(f.byId('sendButton').disabled, false);
+    assert.equal(f.byId('liveStatus').textContent, 'Random quote added to your draft. Review it before sending.');
+    assert.equal(f.requests.length, 0);
+    assert.equal(f.outgoing().length, 0);
+
+    const edited = `${draft}\nMy note`;
+    f.type(edited);
+    f.send();
+    await settle();
+    assert.deepEqual(f.requests[0].body, { type: 'text', content: edited, include_date: true, feed_lines: 3, font_family: 'mono', font_size: 'medium' });
+    assert.equal(f.byId('messageInput').value, '');
+    const preview = { image: 'data:image/png;base64,printed-quote', text: edited, width: 384, height: 400 };
+    f.requests[0].succeed({ success: true, preview });
+    await settle();
+    const conversation = f.byId('messageTrack').children;
+    assert.equal(conversation.length, 2);
+    assert.equal(conversation[0].children[0].textContent, edited);
+    assert.equal(conversation[1].children[0].children[0].src, preview.image);
+});
+
+test('random quotes avoid immediate repeats even when the random source repeats', async () => {
+    const f = await fixture({ random: () => 0 });
+    let previous;
+    for (let pick = 0; pick < 6; pick++) {
+        f.type('');
+        f.byId('quoteButton').events.click();
+        const quote = f.byId('messageInput').value;
+        assert.match(quote, /^“.+”\n— .+$/);
+        assert.notEqual(quote, previous);
+        previous = quote;
+    }
+    assert.equal(f.requests.length, 0);
+});
+
+test('adding a quote preserves an attached photo and prints it with the caption', async () => {
+    const f = await fixture();
+    f.type('Photo caption');
+    await f.attach('saved.png');
+    f.byId('quoteButton').events.click();
+    const caption = f.byId('messageInput').value;
+    assert.ok(caption.startsWith('Photo caption\n\n“'));
+    assert.equal(f.byId('imagePreview').alt, 'saved.png');
+    assert.equal(f.byId('imageAttachment').hidden, false);
+    f.send();
+    await settle();
+    assert.equal(f.requests[0].body.type, 'image');
+    assert.equal(f.requests[0].body.content, 'data:image/png;base64,saved.png');
+    assert.equal(f.requests[0].body.caption, caption);
+    f.requests[0].succeed();
+    await settle();
+});
+
+test('a quote that exceeds the message limit preserves the full draft and photo', async () => {
+    const f = await fixture({ random: () => 0 });
+    const draft = `  ${'x'.repeat(996)}  `;
+    f.type(draft);
+    await f.attach('saved.png');
+    f.byId('quoteButton').events.click();
+    assert.equal(f.byId('messageInput').value, draft);
+    assert.equal(f.byId('imagePreview').alt, 'saved.png');
+    assert.match(f.byId('liveStatus').textContent, /Shorten your draft/);
+    assert.equal(f.document.activeElement, f.byId('messageInput'));
+    assert.equal(f.requests.length, 0);
+    // A rejected addition must not consume the quote or truncate it to fit.
+    f.type('');
+    f.byId('quoteButton').events.click();
+    assert.match(f.byId('messageInput').value, /Nothing great was ever achieved/);
 });
 
 for (const offline of [false, true]) {

@@ -25,7 +25,8 @@
         const article = element('article', 'history-entry');
         const outgoing = element('div', 'message outgoing');
         const date = new Date(entry.created_at);
-        const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        const timestamp = `${time} on ${date.toLocaleDateString('en-US')}`;
         const status = { printed: 'Printed', test_mode: 'Test preview · no paper printed',
             failed: 'Print not confirmed',
             unconfirmed: 'Print not confirmed' }[entry.status] || 'Print not confirmed';
@@ -44,9 +45,9 @@
             incoming.append(paper);
             article.append(incoming);
         }
-        const meta = element('time', 'message-meta', `${status} · ${time}`);
+        const meta = element('time', 'message-meta', `${status} · ${timestamp}`);
         meta.dateTime = entry.created_at;
-        meta.title = date.toLocaleString();
+        meta.title = timestamp;
         if (['failed', 'unconfirmed'].includes(entry.status)) meta.classList.add('failed');
         outgoing.append(meta);
         return article;

@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Remove misleading draft-preservation wording from random meme errors.
+- Hide and disable the message composer during Passive Listening, preserving
+  drafts until the session finishes, including while stopping or reconnecting.
+- Print Passive Listening as a continuous strip, with one separator and optional
+  date per session and no extra paper feed or cut between increments.
+- Show fixed print timestamps on Passive Listening messages, matching other messages.
+- Print photos and memes at the full paper width, preserving their proportions
+  and matching text spacing above the image in prints and ticket previews.
+- Skip animated memes so Random Meme only attaches still images.
+- Format message and ticket timestamps as `9:14 PM on 10/10/2026`, without seconds.
 - Pad incomplete sound-classification windows when recording stops so very short
   audio tails cannot interrupt finalization or discard recognized speech.
 - Feed trailing blank paper with compact ESC/POS commands instead of slow raster
@@ -42,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exposed frontend assets through Flask and made test-mode confirmations explicit.
 
 ### Added
+- Add **Random Quote** to the plus menu with 16 offline quotes, author attribution,
+  review before sending, and no consecutive repeats within the current page.
 - Add an optional offline Sherpa listening backend with streaming English speech
   recognition and confidence-filtered, deduplicated sound labels on tickets.
 - Add a checksum-verified model installer and optional speech-only noise reduction.

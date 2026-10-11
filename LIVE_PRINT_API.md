@@ -9,6 +9,15 @@ interval) and **Stop after**, or leave **Until I stop** selected. Press **Start
 listening**. The persistent listening bar shows the applied timing and ticket
 count, with a **Stop** button. Printed, waiting, cancelled, and failed tickets
 appear in the conversation; the newest 20 are retained in each live history.
+The message composer and attachment controls are hidden while listening, including
+while starting, stopping, or reconnecting. Stop remains available; the composer
+returns with its saved draft once the session has finished.
+
+On paper, a listening session is one continuous strip. The first nonempty increment
+prints a separator and the optional date; later increments append text with a
+single line break, without repeating the header, feeding extra blank paper, or
+cutting. Starting a new listening session prints a new header. Each increment
+keeps its own timestamp and print status in the chat.
 
 The page recovers an active session after refresh. Closing the page does not stop
 the Pi. A connection failure keeps the status visible and retries discovery;
@@ -31,9 +40,9 @@ and disable the development reloader (`DEBUG=False`).
 
 | Field | Meaning | Default | Accepted values |
 | --- | --- | --- | --- |
-| `cadence_seconds` | How much audio to accumulate per printed ticket | `10` | Integer, 1–300 |
+| `cadence_seconds` | How much audio to accumulate per printed increment | `10` | Integer, 1–300 |
 | `duration_seconds` | How long to listen before automatically stopping | `null` | Integer, 1–86400, or `null` |
-| `include_date` | Include the date and time on each printed ticket | `true` | Boolean |
+| `include_date` | Include the date and time at the start of the printed session | `true` | Boolean |
 
 Omit `duration_seconds` or set it to `null` to listen until manually stopped.
 Omit all fields with `{}` to use the defaults. Duration begins when audio capture

@@ -96,8 +96,15 @@ class Microphone:
                        "cadence_seconds": cadence_seconds, "duration_seconds": duration_seconds,
                        "stop_reason": None, "flush_on_stop": True}
             if cadence_seconds is not None:
-                print_text = self._print_text if include_date is None else \
-                    lambda text: self._print_text(text, include_date=include_date)
+                first_chunk = True
+
+                def print_text(text):
+                    nonlocal first_chunk
+                    result = self._print_text(text, include_date=first_chunk and include_date is not False,
+                                              include_separator=first_chunk, continuous=True)
+                    first_chunk = False
+                    return result
+
                 session["live"] = LivePrintQueue(print_text, session["stop"])
                 self._last_live_id = session_id
             # Keep a few completed results so another browser cannot overwrite a pending review.

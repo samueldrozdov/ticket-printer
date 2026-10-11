@@ -79,7 +79,7 @@ test('original spacing preferences preserve the selected size until a new choice
 
 test('font and size preferences persist per server and synchronize between tabs', async () => {
     const f = await fixture();
-    assert.equal(f.settings.fontFamily, 'mono');
+    assert.equal(f.settings.fontFamily, 'sans');
     assert.equal(f.settings.fontSize, 'medium');
     f.byId('fontFamily').value = 'serif';
     f.byId('fontFamily').events.change();
@@ -91,23 +91,23 @@ test('font and size preferences persist per server and synchronize between tabs'
     assert.equal(reopened.byId('fontSizeLarge').checked, true);
     assert.equal(reopened.byId('fontSizeMedium').checked, false);
     const other = await fixture(localHealth, 'https://another-printer.test', f.storage);
-    assert.equal(other.settings.fontFamily, 'mono');
+    assert.equal(other.settings.fontFamily, 'sans');
     assert.equal(other.settings.fontSize, 'medium');
-    reopened.events.storage({key: 'samson-font-family:http://127.0.0.1:8792', newValue: 'sans'});
+    reopened.events.storage({key: 'samson-font-family:http://127.0.0.1:8792', newValue: 'mono'});
     reopened.events.storage({key: 'samson-font-size:http://127.0.0.1:8792', newValue: 'small'});
-    assert.equal(reopened.settings.fontFamily, 'sans');
+    assert.equal(reopened.settings.fontFamily, 'mono');
     assert.equal(reopened.settings.fontSize, 'small');
     reopened.events.storage({key: null, newValue: null});
-    assert.equal(reopened.settings.fontFamily, 'mono');
+    assert.equal(reopened.settings.fontFamily, 'sans');
     assert.equal(reopened.settings.fontSize, 'medium');
 });
 
-test('unsupported saved font choices fall back to the original typography', async () => {
+test('unsupported saved font choices fall back to the default typography', async () => {
     const f = await fixture(localHealth, undefined, new Map([
         ['samson-font-family:http://127.0.0.1:8792', '../../font.ttf'],
         ['samson-font-size:http://127.0.0.1:8792', '2000']
     ]));
-    assert.equal(f.settings.fontFamily, 'mono');
+    assert.equal(f.settings.fontFamily, 'sans');
     assert.equal(f.settings.fontSize, 'medium');
 });
 
@@ -137,7 +137,6 @@ test('Pi identity comes from hardware even when reached through localhost', asyn
 test('remote Mac is not described as this computer', async () => {
     const f = await fixture(localHealth, 'https://samson.example');
     assert.equal(f.byId('serverNoticeTitle').textContent, 'Running on a Mac');
-    assert.equal(f.byId('serverAddress').textContent, 'samson.example');
 });
 
 test('busy and stalled printers keep the Pi online with an accurate printer label', async () => {

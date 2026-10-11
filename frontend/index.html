@@ -32,6 +32,7 @@
         <symbol id="icon-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
         <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
         <symbol id="icon-book" viewBox="0 0 24 24"><path d="M12 5c-3-2-6-2-10-1v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1v15"/></symbol>
+        <symbol id="icon-quote" viewBox="0 0 24 24"><path d="M10 6H4v7h6V6Zm0 7c0 4-2 5-5 5M20 6h-6v7h6V6Zm0 7c0 4-2 5-5 5"/></symbol>
         <symbol id="icon-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 9h.01M16 9h.01M8 14a4 4 0 0 0 8 0"/></symbol>
         <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
         <symbol id="icon-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
@@ -49,11 +50,19 @@
         </header>
         <dialog class="samson-settings" id="samsonSettings" aria-labelledby="samsonSettingsTitle">
             <button class="icon-button settings-close" id="closeSamsonSettings" type="button" aria-label="Close settings" autofocus><svg aria-hidden="true"><use href="#icon-close"/></svg></button>
-            <div class="settings-profile"><img src="assets/samson-avatar.png" alt="" width="72" height="72"><h2 id="samsonSettingsTitle">Samson</h2></div>
+            <div class="settings-profile">
+                <img src="assets/samson-avatar.png" alt="" width="72" height="72">
+                <h2 id="samsonSettingsTitle">Samson</h2>
+                <div class="settings-metadata" role="group" aria-label="Connection status" aria-live="polite">
+                    <span class="metadata-status" id="piMetadata" role="img" aria-label="Pi: Checking…" data-state="checking">Pi</span>
+                    <span class="metadata-status" id="printerMetadata" role="img" aria-label="Printer: Checking…" data-state="checking">Printer</span>
+                    <span class="metadata-status" id="microphoneMetadata" role="img" aria-label="Mic: Checking…" data-state="checking">Mic</span>
+                </div>
+            </div>
             <section class="settings-section" aria-labelledby="settingsHeading">
                 <h3 id="settingsHeading">Messages</h3>
                 <div class="settings-list">
-                    <label class="settings-row date-setting" for="includeDate"><span>Include date</span><input id="includeDate" type="checkbox" role="switch" checked><span class="settings-switch" aria-hidden="true"></span></label>
+                    <label class="settings-row date-setting" for="includeDate"><span>Date</span><input id="includeDate" type="checkbox" role="switch" checked><span class="settings-switch" aria-hidden="true"></span></label>
                     <div class="settings-row spacing-setting">
                         <span id="messageSpacingLabel">Spacing</span>
                         <div class="spacing-options" role="radiogroup" aria-labelledby="messageSpacingLabel">
@@ -64,8 +73,8 @@
                     </div>
                     <label class="settings-row font-setting" for="fontFamily"><span>Font</span><span class="font-select">
                         <select id="fontFamily">
-                            <option value="mono" selected>Monospace</option>
-                            <option value="sans">Sans</option>
+                            <option value="mono">Monospace</option>
+                            <option value="sans" selected>Sans</option>
                             <option value="serif">Serif</option>
                         </select>
                         <svg aria-hidden="true"><use href="#icon-chevron"/></svg>
@@ -80,16 +89,17 @@
                     </div>
                 </div>
             </section>
-            <section class="settings-section" aria-labelledby="infoHeading">
-                <div class="connection-heading"><h3 id="infoHeading">Connection</h3><button id="refreshConnections" type="button">Check again</button></div>
+            <details class="settings-section connection-details" aria-labelledby="infoHeading">
+                <summary class="connection-heading"><h3 id="infoHeading">Connection</h3><svg aria-hidden="true"><use href="#icon-chevron"/></svg></summary>
                 <div class="server-notice" id="serverNotice" hidden><strong id="serverNoticeTitle"></strong><p id="serverNoticeText"></p></div>
                 <dl class="connection-list" aria-live="polite">
-                    <div class="settings-row"><dt><span id="serverLabel">Server</span><small id="serverAddress"></small></dt><dd class="connection-status" id="piConnection" data-state="checking">Checking…</dd></div>
+                    <div class="settings-row"><dt><span id="serverLabel">Server</span></dt><dd class="connection-status" id="piConnection" data-state="checking">Checking…</dd></div>
                     <div class="settings-row"><dt>Microphone</dt><dd class="connection-status" id="microphoneConnection" data-state="checking">Checking…</dd></div>
                     <div class="settings-row"><dt>Printer<small id="printerTransport"></small></dt><dd class="connection-status" id="printerConnection" data-state="checking">Checking…</dd></div>
                 </dl>
+                <div class="connection-actions"><button id="refreshConnections" type="button">Check again</button></div>
                 <p class="settings-note connection-explanation" id="printerExplanation" role="status"></p>
-            </section>
+            </details>
         </dialog>
         <div class="messages" id="messages" role="log" aria-label="Messages with Samson" aria-live="polite" aria-relevant="additions text">
             <div class="message-track" id="messageTrack">
@@ -109,6 +119,7 @@
             <div class="add-menu" id="addMenu" aria-label="Add to your message" hidden>
                 <button id="photoButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-image"/></svg></span>Photo</button>
                 <button id="vocabButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-book"/></svg></span>Vocab Word</button>
+                <button id="quoteButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-quote"/></svg></span>Random Quote</button>
                 <button id="memeButton" type="button"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-smile"/></svg></span>Random Meme</button>
                 <button id="listenButton" type="button" aria-controls="listenSettings"><span class="menu-icon"><svg aria-hidden="true"><use href="#icon-live"/></svg></span><span class="menu-copy">Passive Listening</span><svg class="menu-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg></button>
             </div>

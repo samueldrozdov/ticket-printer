@@ -1,6 +1,7 @@
 """Bounded print queue for one live dictation session."""
 
 from collections import deque
+from datetime import datetime, timezone
 import threading
 
 
@@ -107,6 +108,7 @@ class LivePrintQueue:
                 if isinstance(result, dict) and isinstance(result.get("history_id"), int):
                     job["history_id"] = result["history_id"]
                 job["state"] = "printed"
+                job["printed_at"] = datetime.now(timezone.utc).isoformat()
                 self._printed_count += 1
                 self._recent.append(job)
                 self._current = None

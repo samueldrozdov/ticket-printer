@@ -2,6 +2,7 @@ import base64
 import io
 import unittest
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -78,15 +79,16 @@ class ChatPrintTests(unittest.TestCase):
     def test_text_preview_is_the_exact_ble_raster_with_one_timestamp(self):
         with patch.object(printer_app, 'PRINTER_TYPE', 'ble'), \
                 patch.object(printer_app, 'BLE_PRINTER_ADDR', 'test-printer'), \
-                patch.object(printer_app, 'format_date_string', return_value='9:05:17 AM on 10/10/2026') as date, \
+                patch.object(printer_app, 'datetime') as date, \
                 patch.object(printer_app, 'ble_print_raster_ticket') as transport:
+            date.now.return_value = datetime(2026, 10, 10, 21, 14, 59)
             result = self.client.post('/print', json={'type': 'text', 'content': 'Hello Pi'})
         self.assertEqual(result.status_code, 200)
-        date.assert_called_once()
+        date.now.assert_called_once()
         transport.assert_called_once()
         self.assertEqual(transport.call_args.args[0], 'test-printer')
         self.assert_preview_matches_print(result, transport.call_args.args[1])
-        self.assertEqual(result.json['preview']['text'], '--------------------------------\n9:05:17 AM on 10/10/2026\n\nHello Pi\n\n')
+        self.assertEqual(result.json['preview']['text'], '--------------------------------\n9:14 PM on 10/10/2026\n\nHello Pi\n\n')
         self.assertFalse(result.json['test_mode'])
 
     def test_ble_photo_and_caption_are_one_print_operation(self):
@@ -222,7 +224,10 @@ class ChatPrintTests(unittest.TestCase):
                             preview = preview_image(response)
                             self.assertEqual(preview.crop((0, 0, preview.width, 24)).tobytes(),
                                              standard_separator.tobytes())
-                            body = render_ticket(response.json['preview']['text'].split('\n', 1)[1],
+                            prefix = response.json['preview']['text'].split('\n', 1)[1]
+                            if body.get('type') == 'image':
+                                prefix = prefix.rstrip('\n') + '\n'
+                            body = render_ticket(prefix,
                                                  font_family=family, font_size=size, feed_lines=0)
                             # Both message text and photo captions start immediately after one separator row.
                             self.assertEqual(preview.crop((0, 24, preview.width, 24 + body.height)).tobytes(),
@@ -264,6 +269,34 @@ class ChatPrintTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         print_image.assert_called_once()
         self.assert_preview_matches_print(result, print_image.call_args.args[1])
+
+    def test_full_width_photo_spacing_matches_text_header_and_saved_print(self):
+        image = io.BytesIO()
+        Image.new('RGB', (96, 300), 'black').save(image, 'PNG')
+        content = 'data:image/png;base64,' + base64.b64encode(image.getvalue()).decode()
+        for transport_type in ('usb', 'ble'):
+            for include_date in (True, False):
+                with self.subTest(transport=transport_type, include_date=include_date), \
+                        patch.object(printer_app, 'PRINTER_TYPE', transport_type), \
+                        patch.object(printer_app, 'BLE_PRINTER_ADDR', 'test-printer'), \
+                        patch.object(printer_app, 'format_date_string', return_value='9:14 PM on 10/10/2026'), \
+                        patch.object(printer_app, 'ble_print_raster_ticket') as bluetooth, \
+                        patch.object(printer_app, 'get_printer', return_value=Mock()) as device:
+                    response = self.client.post('/print', json={
+                        'type': 'image', 'content': content, 'include_date': include_date, 'feed_lines': 3})
+                    self.assertEqual(response.status_code, 200)
+                    payload = bluetooth.call_args.args[1] if transport_type == 'ble' else device.return_value._raw.call_args.args[0]
+                    self.assert_preview_matches_print(response, payload)
+                    preview = preview_image(response)
+                    photo_top = 72 if include_date else 24
+                    self.assertEqual(preview.size, (384, photo_top + 1200 + 72))
+                    self.assertEqual(preview.crop((0, photo_top, 384, photo_top + 1200)).getextrema(), (0, 0))
+                    saved = self.client.get('/history?limit=1').json['entries'][0]
+                    self.assertEqual(saved['preview'], response.json['preview'])
+                    text_response = self.client.post('/print', json={
+                        'type': 'text', 'content': 'Hello', 'include_date': include_date})
+                    self.assertEqual(preview.crop((0, 0, 384, photo_top)).tobytes(),
+                                     preview_image(text_response).crop((0, 0, 384, photo_top)).tobytes())
 
     def test_invalid_messages_are_rejected_before_touching_printer(self):
         invalid = [

@@ -82,7 +82,7 @@ def render_separator(width):
 def render_ticket(text, photo=None, feed_lines=DEFAULT_FEED_LINES,
                   font_family=DEFAULT_FONT_FAMILY, font_size=DEFAULT_FONT_SIZE,
                   include_separator=False):
-    """Return the full 1-bit ticket, with no height limit on text."""
+    """Return the full 1-bit ticket, with full-width photos and uncropped content."""
     width = IMAGE_MAX_WIDTH
     if width < CELL_WIDTH or width % 8:
         raise ValueError('IMAGE_MAX_WIDTH must be a multiple of 8 and at least 16')
@@ -90,8 +90,18 @@ def render_ticket(text, photo=None, feed_lines=DEFAULT_FEED_LINES,
     font = ticket_font(font_family, font_size)
     cell_width = round(CELL_WIDTH * font.size / FONT_SIZES[DEFAULT_FONT_SIZE])
     line_height = math.ceil(LINE_HEIGHT * font.size / FONT_SIZES[DEFAULT_FONT_SIZE])
+    if photo is not None:
+        # Give the image the same blank line after its date/caption as message
+        # text gets after the date. Empty captions must not add blank rows.
+        text = text.rstrip('\n')
     lines = ticket_lines(text, width, cell_width, font if font_family != 'mono' else None)
-    photo = prepare_thermal_image(photo, max_width=width) if photo is not None else None
+    if photo is not None:
+        lines = lines + [''] if text else []
+        # Fit the paper width even for small or tall images. The legacy photo
+        # height cap would shrink tall memes and make their text hard to read.
+        photo_height = max(1, round(photo.height * width / photo.width))
+        photo = photo.resize((width, photo_height), Image.Resampling.LANCZOS)
+        photo = prepare_thermal_image(photo, max_width=width, max_height=photo_height)
     separator = render_separator(width) if include_separator else None
     text_top = separator.height if separator is not None else 0
     text_height = text_top + len(lines) * line_height
@@ -110,7 +120,7 @@ def render_ticket(text, photo=None, feed_lines=DEFAULT_FEED_LINES,
             left = font.getbbox(line)[0]
             draw.text((max(0, -left), top), line, font=font, fill=0, anchor='la')
     if photo is not None:
-        ticket.paste(photo, ((width - photo.width) // 2, text_height))
+        ticket.paste(photo, (0, text_height))
     return ticket
 
 

@@ -81,14 +81,14 @@ class MemeSource:
 
     def get(self, exclude=""):
         if not self._slots.acquire(blocking=False):
-            raise MemeUnavailable("Meme requests are busy. Try again shortly; your draft is kept.")
+            raise MemeUnavailable("Meme requests are busy. Try again shortly.")
         try:
             return self._fetch(exclude)
         except MemeUnavailable:
             raise
         except Exception as error:
             logger.warning("Meme provider unavailable: %s", type(error).__name__)
-            raise MemeUnavailable("Couldn’t load a random meme. Your draft is kept. Try again.") from error
+            raise MemeUnavailable("Couldn’t load a random meme. Try again.") from error
         finally:
             self._slots.release()
 
@@ -119,6 +119,8 @@ class MemeSource:
                         mime = IMAGE_TYPES.get(image.format)
                         if not mime or image.width * image.height > MAX_IMAGE_PIXELS:
                             raise ValueError("Unsupported meme image")
+                        if getattr(image, "is_animated", False):
+                            raise ValueError("Animated memes are not supported")
                         image.load()  # Reject corrupt images before changing the user's draft.
                     title = meme.get("title")
                     return {"image": f"data:{mime};base64," + base64.b64encode(data).decode("ascii"),
@@ -127,7 +129,7 @@ class MemeSource:
                     logger.info("Skipping unavailable meme image: %s", type(error).__name__)
                     if time.monotonic() >= deadline:
                         raise
-        raise MemeUnavailable("No new meme could be loaded. Your draft is kept. Try again.")
+        raise MemeUnavailable("No new meme could be loaded. Try again.")
 
 
 def create_meme_blueprint(source=None):

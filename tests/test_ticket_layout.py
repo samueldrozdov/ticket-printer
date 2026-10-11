@@ -61,6 +61,28 @@ class TicketLayoutTests(unittest.TestCase):
         image = ble_printer.prepare_thermal_image(Image.new('RGB', (1, 1600)))
         self.assertEqual(image.size, (1, 800))
 
+    def test_ticket_photos_fill_paper_width_without_cropping_or_distortion(self):
+        for width in (384, 576):
+            for dimensions in ((96, 48), (768, 96), (192, 600), (1000, 1)):
+                with self.subTest(width=width, dimensions=dimensions), \
+                        patch('ticket_layout.IMAGE_MAX_WIDTH', width):
+                    photo = Image.new('RGB', dimensions, 'black')
+                    ticket = render_ticket('', photo, feed_lines=0)
+                    self.assertEqual(ticket.size, (width, max(1, round(dimensions[1] * width / dimensions[0]))))
+                    self.assertEqual(ticket.getextrema(), (0, 0))
+
+    def test_photo_starts_after_one_blank_line_or_directly_after_separator_without_text(self):
+        photo = Image.new('RGB', (384, 48), 'black')
+        for text, photo_top in (('', 24), ('\n\n', 24), ('Date\n\n\n\n', 72),
+                                ('Date\n\nCaption\n\n', 120)):
+            with self.subTest(text=text):
+                ticket = render_ticket(text, photo, feed_lines=0, include_separator=True)
+                self.assertEqual(ticket.height, photo_top + 48)
+                self.assertEqual(ticket.crop((0, photo_top, 384, ticket.height)).getextrema(), (0, 0))
+                if text.strip():
+                    self.assertEqual(ticket.crop((0, photo_top - 24, 384, photo_top)).convert('L').getextrema(),
+                                     (255, 255))
+
     def test_odd_width_raster_padding_is_white(self):
         # Only the real black pixel may print; the seven padding bits stay off.
         self.assertEqual(ble_printer.encode_raster(Image.new('1', (1, 1), 0)),

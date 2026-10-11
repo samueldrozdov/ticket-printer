@@ -38,20 +38,18 @@ def _chunk(data: bytes, n: int):
         yield data[i : i + n]
 
 
-def _escpos_frame(text: str) -> bytes:
+def _escpos_frame(text: str, *, continuous: bool = False) -> bytes:
     """
     Minimal ESC/POS:
       ESC @      initialize
       text
       \n\n\n     feed
       GS V 0     cut (some printers ignore)
+
+    Continuous listening omits the feed and cut footer.
     """
-    return (
-        b"\x1b@" +
-        text.encode("utf-8", errors="replace") +
-        b"\n\n\n" +
-        b"\x1dV\x00"
-    )
+    payload = b"\x1b@" + text.encode("utf-8", errors="replace")
+    return payload if continuous else payload + b"\n\n\n\x1dV\x00"
 
 
 def _image_to_escpos_raster(image: Image.Image, max_width: int = None, max_height: int = None, use_dithering: bool = None, contrast: float = None) -> bytes:
@@ -312,8 +310,8 @@ def _print_in_process(addr, payload, chunk_size=BLE_CHUNK_SIZE, write_gap=BLE_WR
         raise RuntimeError("The Bluetooth worker exited without confirming the ticket. Check the paper before resending.")
 
 
-def ble_print_text(addr: str, text: str):
-    payload = _escpos_frame(text)
+def ble_print_text(addr: str, text: str, *, continuous: bool = False):
+    payload = _escpos_frame(text, continuous=continuous)
     _print_in_process(addr, payload)
 
 

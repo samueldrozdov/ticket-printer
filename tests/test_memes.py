@@ -56,6 +56,44 @@ class MemeTests(unittest.TestCase):
         with patch('memes.download', side_effect=fetch):
             self.assertEqual(MemeSource().get()['url'], entry['url'])
 
+    def test_animated_images_are_skipped_regardless_of_url_extension(self):
+        entries = [meme('animated'), meme('still')]
+        for image_format in ('GIF', 'WEBP', 'PNG'):
+            with self.subTest(image_format=image_format):
+                animated = io.BytesIO()
+                Image.new('RGB', (12, 12), 'white').save(
+                    animated, image_format, save_all=True,
+                    append_images=[Image.new('RGB', (12, 12), 'black')], duration=100, loop=0)
+                with Image.open(io.BytesIO(animated.getvalue())) as image:
+                    self.assertTrue(image.is_animated)
+                with patch('memes.download', side_effect=[
+                        json.dumps({'memes': entries}).encode(), animated.getvalue(), self.image]) as upstream:
+                    result = MemeSource().get()
+                self.assertEqual(upstream.call_count, 3)
+                self.assertEqual(result['url'], entries[1]['url'])
+                self.assertEqual(result['image'], 'data:image/png;base64,' + base64.b64encode(self.image).decode())
+
+    def test_animated_preview_is_rejected_when_original_is_unavailable(self):
+        entry = meme('missing', preview=['https://preview.redd.it/animated.png'])
+        animated = io.BytesIO()
+        Image.new('RGB', (12, 12), 'white').save(
+            animated, 'PNG', save_all=True,
+            append_images=[Image.new('RGB', (12, 12), 'black')], duration=100, loop=0)
+        with patch('memes.download', side_effect=[json.dumps({'memes': [entry]}).encode(),
+                   OSError('404'), animated.getvalue()]):
+            with self.assertRaisesRegex(MemeUnavailable, 'No new meme could be loaded'):
+                MemeSource().get()
+
+    def test_single_frame_images_remain_supported(self):
+        for image_format, mime in (('GIF', 'image/gif'), ('WEBP', 'image/webp'), ('JPEG', 'image/jpeg')):
+            with self.subTest(image_format=image_format):
+                still = io.BytesIO()
+                Image.new('RGB', (12, 12), 'white').save(still, image_format)
+                with patch('memes.download', side_effect=[
+                        json.dumps({'memes': [meme('still')]}).encode(), still.getvalue()]):
+                    result = MemeSource().get()
+                self.assertEqual(result['image'], f'data:{mime};base64,' + base64.b64encode(still.getvalue()).decode())
+
     def test_flagged_previous_and_unsupported_urls_are_never_downloaded(self):
         entries = [dict(meme('nsfw'), nsfw=True), dict(meme('spoiler'), spoiler=True), meme('previous'),
                    dict(meme('private'), url='http://127.0.0.1/private'), meme('new')]
@@ -143,5 +181,5 @@ class MemeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         source.get.assert_called_once_with('http://127.0.0.1/private')
-        source.get.side_effect = MemeUnavailable('Temporarily unavailable; draft kept')
+        source.get.side_effect = MemeUnavailable('Temporarily unavailable. Try again.')
         self.assertEqual(client.get('/random-meme', headers=auth).status_code, 503)

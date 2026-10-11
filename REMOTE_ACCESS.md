@@ -1,5 +1,9 @@
 # Use Samson away from home
 
+**Updating the installed Pi?** Use [DEPLOYMENT.md](DEPLOYMENT.md). The setup
+commands below are for establishing remote access; ordinary releases keep the
+existing tunnel running and restart only the app.
+
 Run the complete website and API on the Raspberry Pi and expose it through an
 HTTPS tunnel. Your phone can then use cellular or another Wi-Fi network. The Pi
 must stay powered, online, and connected to the printer. Recording still uses
@@ -168,9 +172,14 @@ backed up alongside the app, and the normal `bluetooth.service` remains enabled.
 ## Verification without paper
 
 ```bash
-SAMSON_PASSWORD= SAMSON_REMOTE_ACCESS=false python -m unittest discover -s tests -v
+samson_test_dir=$(mktemp -d)
+SAMSON_PASSWORD='' SAMSON_REMOTE_ACCESS=false PRINT_HISTORY_PATH="$samson_test_dir/history.sqlite3" python -m unittest discover -s tests -v
 TEST_MODE=true python serve_remote.py --tunnel
 ```
+
+Stop any existing app before running the preview server; do not use this command
+to test alongside the installed service. For release checks, use
+[DEPLOYMENT.md](DEPLOYMENT.md#4-restart-and-verify).
 
 The test command overrides your `.env` login settings for that test process only;
 the authentication tests create their own protected app. Test mode renders ticket

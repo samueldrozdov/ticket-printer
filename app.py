@@ -125,17 +125,16 @@ def build_ticket_text(from_name: str, question: str) -> str:
 
 
 def format_date_string() -> str:
-    """Format current date/time as '7:22:00 PM on 12/12/2025'"""
+    """Format current date/time as '9:14 PM on 10/10/2026'."""
     now = datetime.now()
     # Use lstrip to remove leading zeros for cross-platform compatibility
     hour = now.strftime("%I").lstrip("0")
     minute = now.strftime("%M")
-    second = now.strftime("%S")
     ampm = now.strftime("%p")
     month = str(now.month)
     day = str(now.day)
     year = now.strftime("%Y")
-    return f"{hour}:{minute}:{second} {ampm} on {month}/{day}/{year}"
+    return f"{hour}:{minute} {ampm} on {month}/{day}/{year}"
 
 
 def build_print_content(content: str, include_separator: bool = True, include_date: bool = True) -> str:
@@ -192,22 +191,28 @@ def get_printer(raise_errors=False):
 
 
 @serialized_print
-def print_text_content(content, include_date=True, return_history=False):
+def print_text_content(content, include_date=True, return_history=False, *,
+                       include_separator=True, continuous=False):
     """Shared printer operation; background workers do not need a Flask context."""
-    text = build_print_content(content, include_date=include_date)
+    text = build_print_content(content, include_separator=include_separator, include_date=include_date)
+    if continuous:
+        text = text.rstrip('\n') + '\n'
     with print_history.record(source="listening", text=content.strip(), test_mode=TEST_MODE) as history_id:
-        message = _print_text(text)
+        message = _print_text(text, continuous=continuous)
     return {"message": message, "history_id": history_id} if return_history else message
 
 
-def _print_text(text):
+def _print_text(text, *, continuous=False):
     if TEST_MODE:
         logger.info("TEST MODE - Would print text: %s", text)
         return "Ticket logged in test mode; no paper printed."
     if PRINTER_TYPE == "ble":
         if not BLE_PRINTER_ADDR:
             raise RuntimeError("BLE_PRINTER_ADDR is not set")
-        ble_print_text(BLE_PRINTER_ADDR, text)
+        if continuous:
+            ble_print_text(BLE_PRINTER_ADDR, text, continuous=True)
+        else:
+            ble_print_text(BLE_PRINTER_ADDR, text)
         return "Printed successfully (BLE)"
     printer = get_printer()
     if printer is None:
@@ -215,8 +220,9 @@ def _print_text(text):
     try:
         printer.set(align="left", font="a", width=1, height=1, bold=False)
         printer.text(text)
-        printer.text("\n\n")
-        printer.cut()
+        if not continuous:
+            printer.text("\n\n")
+            printer.cut()
     finally:
         printer.close()
     return "Printed successfully"

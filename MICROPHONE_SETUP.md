@@ -1,5 +1,11 @@
 # Speak, review, and print
 
+**Existing sd-pi installation:** speech and sound recognition already use the
+Sherpa backend in `.venv`. Follow [DEPLOYMENT.md](DEPLOYMENT.md) for updates and
+[the local listening section below](#upgrade-to-local-speech-and-sound-recognition)
+for model changes. The Vosk/`venv` steps below describe a fresh basic setup;
+do not replace the installed service or start a second app to apply an update.
+
 Plug the Samson Go Mic into a USB port on the **Raspberry Pi**. The Pi converts
 speech to text locally with Vosk; the browser lets you review and edit it before
 pressing **Print**. The printer keeps its existing Bluetooth connection.

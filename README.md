@@ -26,13 +26,15 @@ Perfect for:
 
 This application provides a complete solution for collecting and printing tickets in physical form. It consists of:
 
-- **Web Interface**: A clean, responsive frontend that can be hosted on Netlify or run locally
+- **Web Interface**: A responsive frontend served by the Raspberry Pi
 - **Backend API**: A Flask-based API running on Raspberry Pi that handles printer communication
 - **Multiple Printer Support**: Works with USB, Serial, Network, and Bluetooth-connected printers
 - **Print History**: Automatically save tickets on the server and show them when the website opens
-- **Spam Protection**: Built-in reCAPTCHA integration
+- **Remote Access**: Password-protected access through an HTTPS tunnel
 
-The system is designed to be flexible and easy to deploy. You can run everything on a single Raspberry Pi, or separate the frontend (hosted on Netlify) from the backend (on your Pi) for remote access.
+The current installation runs the website and API together on the Raspberry Pi.
+Older Netlify integration files remain in the repository; see the
+[legacy notes](README_NETLIFY.md) for their limitations.
 
 ## Features
 
@@ -41,13 +43,18 @@ The system is designed to be flexible and easy to deploy. You can run everything
 - ⏰ Timestamp and date stamping
 - 💾 Persistent print history with text, timestamps, and ticket previews
 - 🌐 Accessible from any device on your network
-- 🔒 Built-in reCAPTCHA spam protection
+- 🔒 Password-protected remote access
 
 ## Quick Start
+
+**Deploying an update?** Follow [DEPLOYMENT.md](DEPLOYMENT.md), the current
+GitHub → Raspberry Pi runbook. It covers testing, publishing, updating the Pi,
+restarting the app without changing the public link, and checking the result.
 
 Sending a chat message clears the composer immediately, so you can send the next
 message while Samson prints. Each sent message, photo, meme, or vocab word appears
 on your side of the conversation, followed directly by Samson’s ticket preview.
+Message and ticket timestamps use the format `9:14 PM on 10/10/2026`.
 Messages print in the order sent; keep the page open until queued messages finish.
 Unconfirmed messages stay visible with their error directly underneath.
 
@@ -89,9 +96,12 @@ so you can see whether Samson is picking up audio before words appear.
 
 For continuous listening, choose **+ → Passive Listening** in the chat. Set the print
 cadence and optional duration, then use **Stop** in the listening bar to turn it
-off. See [LIVE_PRINT_API.md](LIVE_PRINT_API.md) for the API and recovery behavior.
+off. Each session prints a continuous strip with one separator and optional date
+at the start; later increments append text without extra gaps or cuts. See
+[LIVE_PRINT_API.md](LIVE_PRINT_API.md) for the API and recovery behavior.
 
-Want to get started quickly? See [QUICK_START.md](QUICK_START.md) for a step-by-step guide to deploy the application.
+See [QUICK_START.md](QUICK_START.md) for an overview and
+[DEPLOYMENT.md](DEPLOYMENT.md) for the complete deployment procedure.
 
 For detailed setup instructions, continue reading below.
 
@@ -99,25 +109,21 @@ For detailed setup instructions, continue reading below.
 
 Before starting, you'll need to configure the following:
 
-### Required Configuration
+### Current Pi installation
 
-1. **reCAPTCHA Site Key** - Replace `YOUR_RECAPTCHA_SITE_KEY` in `frontend/index.html` (line 183)
-   - Get your key from [Google reCAPTCHA Admin](https://www.google.com/recaptcha/admin)
-   - Or set via Netlify environment variable `RECAPTCHA_SITE_KEY`
+Keep the Pi's existing `.env` with its password, printer, and microphone settings.
+The website uses the API at the same origin; leave `productionApiUrl` at its
+placeholder and `window._env.REACT_APP_API_URL` unset. The current chat and local
+print history do not require reCAPTCHA or Convex.
 
-2. **API URL** - Replace `YOUR_API_URL_HERE` in `frontend/index.html` (line 217)
-   - Set this to your ngrok, Cloudflare tunnel, or direct Raspberry Pi URL
-   - Example: `https://abc123.ngrok.io` or `https://your-tunnel.trycloudflare.com`
-
-### Optional Configuration
-
-3. **Convex Database** (Optional) - Set `CONVEX_DEPLOYMENT` in Netlify environment variables
-   - Only needed for the legacy Netlify submission integration
-   - The current `app.py` website saves print history locally without Convex
-
-See `env.example` for all available environment variables.
+See [REMOTE_ACCESS.md](REMOTE_ACCESS.md) for password setup and `env.example` for
+available settings. Older split-hosting configuration is described in
+[legacy Netlify notes](README_NETLIFY.md).
 
 ## Setup Instructions
+
+These steps describe a fresh local installation. For the existing `sd-pi`
+deployment, use [DEPLOYMENT.md](DEPLOYMENT.md) instead.
 
 ### 1. Install Dependencies
 
@@ -195,56 +201,36 @@ Then access the web interface from any device on your network:
 http://[RASPBERRY_PI_IP]:5000
 ```
 
-### 6. Run as a Service (Optional)
+### 6. Run as a Service
 
-To run the application automatically on boot:
-
-```bash
-# Create a systemd service file
-sudo nano /etc/systemd/system/ticket-printer.service
-```
-
-Add the following content:
-
-```ini
-[Unit]
-Description=Ticket Printer Application
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/ticket-printer-app
-ExecStart=/usr/bin/python3 /home/pi/ticket-printer-app/app.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then enable and start the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable ticket-printer
-sudo systemctl start ticket-printer
-sudo systemctl status ticket-printer
-```
+The installed Pi already runs `serve_remote.py` under `ticket-printer.service`
+with a separate `samson-tunnel.service`. Use [DEPLOYMENT.md](DEPLOYMENT.md) for
+updates. For a new installation, follow the service configuration in
+[REMOTE_ACCESS.md](REMOTE_ACCESS.md#keep-the-same-link-after-a-restart).
+Only one application process should control the printer and microphone.
 
 ## Usage
 
 1. Run the root `app.py` and open `http://[YOUR_PI_IP]:5000`.
 2. Type in **Message Samson** and click the blue send arrow. Enter sends;
    Shift+Enter adds a new line.
-3. Use **+** to add a **Photo**, **Vocab Word**, or **Random Meme**. Vocab Word adds
-   a random word and its definition; Random Meme attaches a random meme image.
+3. Use **+** to add a **Photo**, **Vocab Word**, **Random Quote**, or **Random Meme**. Vocab Word adds
+   a random word and its definition; Random Meme attaches a random still meme image.
    Vocab Word includes backup definitions for offline use; Random Meme needs an
    internet connection. Samson fetches and validates meme images on the server,
-   trying another image when one is missing, too large, or corrupt. This avoids
+   trying another image when one is animated, missing, too large, or corrupt. This avoids
    image-host browser restrictions; failures keep the existing draft and photo.
    Both let you review the draft before sending. Image
    previews and optional captions share the message box and print together as one
-   ticket. You can also drop or paste an image into the box.
+   ticket. Printed photos and memes fill the printable paper width while keeping
+   their proportions, with the same spacing below the date as text messages.
+   Ticket previews and saved history use that same layout.
+   You can also drop or paste an image into the box.
+   **Random Quote** adds one of 16 bundled quotes with its author to your draft,
+   works offline, and avoids repeating the previous quote while the page is open.
+   Review or edit it, then send to print with your current settings. Existing text
+   and photos are preserved; if the quote would exceed the 1,000-character limit,
+   shorten your draft and try again.
 4. Use the microphone button to record on the Pi. Review the transcript in the
    message box, then send it. See [microphone setup](MICROPHONE_SETUP.md).
 5. Watch the conversation for print confirmations. Failed requests keep your
@@ -370,20 +356,22 @@ This application supports multiple deployment configurations:
 - Run `app.py` directly on the Raspberry Pi
 - Access via local network: `http://[PI_IP]:5000`
 
-### Password-protected remote access (Recommended)
-- Run `python serve_remote.py --tunnel` on the Pi after configuring its password.
-- Open the generated HTTPS link on any network and sign in as `samson`.
-- See [REMOTE_ACCESS.md](REMOTE_ACCESS.md) for setup and a persistent URL.
+### Password-protected remote access (Current installation)
+
+- The app and tunnel run as separate services on the Pi.
+- Open the HTTPS link from `samson-link` and enter the configured password.
+- See [DEPLOYMENT.md](DEPLOYMENT.md) for updates and
+  [REMOTE_ACCESS.md](REMOTE_ACCESS.md) for initial setup and a persistent URL.
 
 ### Separate frontend on Netlify (Legacy)
-- Frontend: Deploy `frontend/` folder to Netlify
-- Backend: Run `backend/api.py` on Raspberry Pi
-- Expose backend via ngrok or Cloudflare Tunnel
-- See `README_NETLIFY.md` for detailed instructions
+
+The old standalone API does not provide the current frontend's full feature set.
+See [legacy Netlify notes](README_NETLIFY.md) before reusing those files.
 
 ## Environment Variables
 
-Copy `env.example` to `.env` and configure:
+On an existing Pi, edit its current `.env` instead of replacing it.
+For a new installation only:
 
 ```bash
 cp env.example .env

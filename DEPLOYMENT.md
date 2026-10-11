@@ -1,393 +1,234 @@
-# Deployment Guide for Ticket Printer App
+# Deploy Samson to the Raspberry Pi
 
-This guide covers multiple deployment options for your ticket printer application.
+This is the deployment runbook for the current Samson installation. The Pi serves
+both the website and API. **Pushing to GitHub does not update the Pi**: publish a
+tested commit, install that commit on the Pi, restart the app, then reload the page.
 
-## Quick Deployment Options
+## Current installation
 
-### Option 1: Deploy to Raspberry Pi (Recommended)
+| Item | Value |
+| --- | --- |
+| Repository | [samueldrozdov/ticket-printer](https://github.com/samueldrozdov/ticket-printer), branch `main` |
+| Pi user / hostname | `sd` / `sd-pi` |
+| Checkout | `/home/sd/ticket-printer-os` |
+| Python | `/home/sd/ticket-printer-os/.venv/bin/python` |
+| App | Root `app.py`, served by `serve_remote.py` on `127.0.0.1:5000` |
+| App service | `ticket-printer.service` |
+| HTTPS tunnel service | `samson-tunnel.service` |
+| Current public address | Run `samson-link` on the Pi |
+| Settings / history / models | `.env`, `data/print-history.sqlite3`, `models/` |
+| Backups | `/home/sd/ticket-printer-backups/` |
 
-#### Prerequisites
-- Raspberry Pi with Raspberry Pi OS installed
-- Netum 58mm thermal printer
-- USB cable to connect printer to Pi
+Use Raspberry Pi Connect → **Remote shell**, or an existing SSH connection.
+The current tunnel is a Cloudflare Quick Tunnel. Restart only the app during an
+ordinary deployment; restarting the tunnel or rebooting the Pi changes its URL.
+There is no frontend build step and no Netlify deployment in this setup.
 
-#### Step 1: Transfer Files to Raspberry Pi
+## 1. Publish a tested commit from the development computer
 
-Choose one of these methods:
-
-**Method A: Using USB Flash Drive**
-```bash
-# On your Mac:
-# 1. Copy the entire folder to a USB drive
-cp -r /path/to/ticket-printer-app /Volumes/YOUR_USB_NAME/
-
-# 2. Insert USB into Raspberry Pi
-# 3. On the Pi, copy files to home directory:
-cp -r /media/pi/*/ticket-printer-app ~/
-cd ~/ticket-printer-app
-```
-
-**Method B: Using SCP (Network Transfer)**
-```bash
-# On your Mac, from the project directory:
-scp -r /path/to/ticket-printer-app pi@raspberrypi.local:/home/pi/
-
-# Then SSH into the Pi:
-ssh pi@raspberrypi.local
-cd ~/ticket-printer-app
-```
-
-**Method C: Using Git**
-```bash
-# On your Mac:
-cd /path/to/ticket-printer-app
-git init
-git add .
-git commit -m "Initial commit"
-# Create a repo on GitHub and push
-git remote add origin YOUR_GITHUB_URL
-git push -u origin main
-
-# On Raspberry Pi:
-git clone YOUR_GITHUB_URL
-cd ticket-printer
-```
-
-#### Step 2: Run Setup Script
+Review the working tree and select the completed changes for this release:
 
 ```bash
-# Make sure you're in the project directory
-cd ~/ticket-printer-app
-
-# Make the setup script executable
-chmod +x setup.sh
-
-# Run the setup
-./setup.sh
+git status --short
+git branch --show-current
+git diff
+git diff --cached
 ```
 
-This will:
-- Install Python and system dependencies
-- Install printer drivers
-- Install Python packages
-- Set up permissions
-- Create a systemd service
+This workflow publishes `main`; finish merging any working branch before testing
+and publishing. If other tasks are editing this checkout, wait for those changes
+to be ready or test an isolated checkout of the intended release.
+Stage explicit files with `git add <file>` or review hunks with `git add -p`;
+do not sweep unrelated work into a deployment with `git add .`. Uncommitted files
+on the development computer never reach the Pi through Git.
 
-#### Step 3: Connect and Configure Printer
+Run the checks below in your activated development Python environment. Install
+the applicable dependencies first; `requirements-remote.txt` includes the base
+requirements, and `requirements-listening.txt` includes microphone support and
+NumPy for the audio pipeline tests. JavaScript tests require Node.js.
 
 ```bash
-# Connect your printer via USB
-# Find the printer's USB ID:
-sudo lsusb
+samson_test_dir=$(mktemp -d)
+SAMSON_PASSWORD='' SAMSON_REMOTE_ACCESS=false \
+  PRINT_HISTORY_PATH="$samson_test_dir/history.sqlite3" \
+  python -m unittest discover -s tests
+node --test tests/*.test.cjs
 ```
 
-You should see something like:
-```
-Bus 001 Device 003: ID 0416:5011 Netum printer
-```
+Both commands must pass. The authentication overrides apply only to the test
+process; never copy them into the Pi's `.env`. The temporary history path keeps
+test records out of real print history. Tests mock printer operations; they do
+not replace a physical check when printer behavior changes.
 
-#### Step 4: Update Configuration (if needed)
+For documentation-only changes, check links, referenced paths, and command syntax.
+After updating the Pi checkout, skip the application suites and app restart.
 
-If your printer has different USB IDs, edit `app.py`:
+Commit the reviewed files, push, and record the full commit ID:
 
 ```bash
-nano app.py
+git diff --cached --check
+git commit -m "Describe the completed change"
+git push origin main
+git rev-parse HEAD
 ```
 
-Look for lines 19-20:
-```python
-USB_VENDOR = int(os.getenv('USB_VENDOR', '0x0416'), 16)
-USB_PRODUCT = int(os.getenv('USB_PRODUCT', '0x5011'), 16)
-```
+The commit must contain the same code you tested. Keep that ID for the Pi step
+and the deployment report; avoid chasing a moving branch while other work lands.
 
-Replace `0x0416` and `0x5011` with your printer's IDs from `lsusb`.
+## 2. Prepare the Pi
 
-#### Step 5: Test Printer Connection
+Stop recording or Passive Listening in the website and wait for all queued
+messages and physical printing to finish. Preserve any draft before reloading.
+Keep other clients from sending messages during the short deployment window.
+
+On the Pi, check the checkout and services:
 
 ```bash
-python3 -c "
-from escpos.printer import Usb
-p = Usb(0x0416, 0x5011)
-p.text('Test print')
-p.cut()
-"
+cd /home/sd/ticket-printer-os
+git status --short
+git rev-parse HEAD
+sudo systemctl status ticket-printer samson-tunnel --no-pager
 ```
 
-#### Step 6: Start the Application
+If the checkout has local changes, reconcile them before continuing. Do not use
+`git reset --hard`, `git clean`, or overwrite `.env` to force a deployment.
+Preserve the existing password, printer/microphone settings, history, and models.
+Do not run `setup.sh`, `deploy.sh`, or install `backend/ticket-printer.service` on
+this installation: those are older setup paths with different service settings.
 
-**Option A: Run Manually (for testing)**
-```bash
-python3 app.py
-```
-
-**Option B: Run as a Service (starts on boot)**
-```bash
-sudo systemctl start ticket-printer
-sudo systemctl enable ticket-printer
-sudo systemctl status ticket-printer
-```
-
-#### Step 7: Get Raspberry Pi IP Address
+Make a backup and record the previous revision in this same shell:
 
 ```bash
-hostname -I
+umask 077
+mkdir -p /home/sd/ticket-printer-backups
+samson_backup_dir=$(mktemp -d /home/sd/ticket-printer-backups/before-deploy-XXXXXX)
+git rev-parse HEAD > "$samson_backup_dir/commit.txt"
+cp .env "$samson_backup_dir/.env"
+.venv/bin/python - "$samson_backup_dir" <<'PYTHON'
+import os
+from pathlib import Path
+import sqlite3
+import sys
+from dotenv import load_dotenv
+
+load_dotenv('.env')
+history = Path(os.getenv('PRINT_HISTORY_PATH', 'data/print-history.sqlite3'))
+if history.exists():
+    with sqlite3.connect(history) as source, sqlite3.connect(
+        Path(sys.argv[1]) / 'print-history.sqlite3'
+    ) as destination:
+        source.backup(destination)
+PYTHON
+printf 'Backup: %s\n' "$samson_backup_dir"
 ```
 
-Access from any device: `http://YOUR_PI_IP:5000`
+SQLite's backup API handles an open database correctly. Keep this directory
+private because it contains the password. Models are not changed by a Git update.
 
-### Option 2: Local Testing (without Printer)
+## 3. Install the exact release
 
-Test the web interface locally:
+Replace the placeholder with the full commit ID from step 1. Run this block as a
+unit so a failed check stops the update:
 
 ```bash
-# Install dependencies
-pip3 install -r requirements.txt
-
-# Run the app
-python3 app.py
+(
+  set -eu
+  cd /home/sd/ticket-printer-os
+  SAMSON_RELEASE=PASTE_FULL_COMMIT_ID_HERE
+  test -z "$(git status --porcelain)"
+  test "$(git branch --show-current)" = main
+  git fetch origin
+  git merge-base --is-ancestor "$SAMSON_RELEASE" origin/main
+  git merge-base --is-ancestor HEAD "$SAMSON_RELEASE"
+  git merge --ff-only "$SAMSON_RELEASE"
+  test "$(git rev-parse HEAD)" = "$SAMSON_RELEASE"
+)
 ```
 
-Open browser to: `http://localhost:5000`
-
-Note: Without a printer connected, the print operations will fail, but you can test the web interface.
-
-### Option 3: Deploy with Different Printer Types
-
-#### Bluetooth Printer Setup
+If requirements changed, install them using the Pi's existing environment:
 
 ```bash
-# On Raspberry Pi, pair Bluetooth printer:
-sudo bluetoothctl
-scan on
-# Wait to see your printer, then:
-pair MAC_ADDRESS
-trust MAC_ADDRESS
-exit
-
-# Bind to serial port:
-sudo rfcomm bind /dev/rfcomm0 MAC_ADDRESS
-
-# Set environment variables:
-export PRINTER_TYPE=bluetooth
-export SERIAL_PORT=/dev/rfcomm0
-
-# Run the app
-python3 app.py
+.venv/bin/python -m pip install -r requirements-remote.txt -r requirements-listening.txt
 ```
 
-#### Serial/GPIO Printer Setup
+Only run `.venv/bin/python install_listening_models.py` when installing or changing
+the local listening models. Routine code/UI updates do not need new model
+downloads. See [microphone setup](MICROPHONE_SETUP.md#upgrade-to-local-speech-and-sound-recognition)
+for model configuration; audio recognition stays on the Pi.
+
+Run the Python suite on the Pi with isolated history:
 
 ```bash
-# Enable serial interface:
-sudo raspi-config
-# Navigate to: Interface Options > Serial Port > Enable
-
-# Set environment variables:
-export PRINTER_TYPE=serial
-export SERIAL_PORT=/dev/ttyAMA0
-
-# Run the app
-python3 app.py
+samson_test_dir=$(mktemp -d)
+SAMSON_PASSWORD='' SAMSON_REMOTE_ACCESS=false \
+  PRINT_HISTORY_PATH="$samson_test_dir/history.sqlite3" \
+  .venv/bin/python -m unittest discover -s tests
 ```
 
-#### Network Printer Setup
+Proceed only if it passes. If installation or tests fail, restore the previous
+revision before reopening the site for use; frontend files are served directly
+from the checkout even before the app restarts.
+
+## 4. Restart and verify
+
+Confirm listening and printing are still idle, then restart only the app:
 
 ```bash
-# Set environment variables:
-export PRINTER_TYPE=network
-export NETWORK_HOST=192.168.1.100
-
-# Run the app
-python3 app.py
+sudo systemctl restart ticket-printer.service
+sudo systemctl is-active ticket-printer.service samson-tunnel.service
+sudo journalctl -u ticket-printer.service -n 50 --no-pager
+git rev-parse HEAD
+samson-link
 ```
 
-## Production Configuration
+Both services should report `active`, and the commit must match the release ID.
+The existing HTTPS address should still work. Do not launch a second `app.py`,
+`serve_remote.py --tunnel`, or `backend/api.py` process alongside the service.
 
-### Running as a System Service
+In the browser:
 
-The setup script creates a systemd service. To manage it:
+1. Preserve any draft, reload the page, and sign in if needed. An already-open tab
+   keeps its loaded JavaScript until reloaded, even though responses use `no-store`.
+2. Open Settings → **Check again**. The app should be reachable and the printer
+   available. Authenticated `/health` reports `service: samson`, `status: healthy`,
+   and `printer_state`; `healthy` alone does not confirm printer readiness.
+3. Check the feature changed by this release and confirm existing history appears.
+4. If printing changed, send one clearly labeled test and check the paper. Do not
+   automatically resend an unconfirmed ticket. If listening changed, record and
+   stop a short sample in review mode before testing automatic printing.
+
+Report the deployed commit, checks performed, and any hardware checks still
+unverified. A successful push alone is not a completed deployment.
+
+## Roll back a failed release
+
+Wait for recording and printing to be idle. With a clean Pi checkout, use the
+backup directory recorded in step 2 (set `samson_backup_dir` again if this is a
+new shell):
 
 ```bash
-# Start the service
-sudo systemctl start ticket-printer
-
-# Stop the service
-sudo systemctl stop ticket-printer
-
-# Restart the service
-sudo systemctl restart ticket-printer
-
-# Check status
-sudo systemctl status ticket-printer
-
-# View logs
-sudo journalctl -u ticket-printer -f
-
-# Enable on boot
-sudo systemctl enable ticket-printer
-
-# Disable on boot
-sudo systemctl disable ticket-printer
+git switch --detach "$(cat "$samson_backup_dir/commit.txt")"
+sudo systemctl restart ticket-printer.service
 ```
 
-### Configuration via Environment Variables
+Repeat the service and browser checks above. This restores code and frontend
+together without replacing `.env`, history, or models. Dependency or database
+format changes need their own compatible rollback; do not erase newer history
+by blindly restoring a database backup. Before the next deployment, return to
+`main` with `git switch main` during the idle deployment window, then install the
+new tested release before restarting.
 
-Create a `.env` file or set systemd environment:
+## If the website looks out of date
 
-```bash
-sudo systemctl edit ticket-printer
-```
+Compare the development commit, GitHub's `main`, and the Pi's `git rev-parse HEAD`.
+Check for uncommitted development changes. Then confirm the running service uses
+`/home/sd/ticket-printer-os/serve_remote.py` and reload the browser after preserving
+its draft. Restarting the tunnel does not update the code and may invalidate the
+link. Use `samson-link` if the Pi or tunnel was restarted.
 
-Add:
-```ini
-[Service]
-Environment="PRINTER_TYPE=usb"
-Environment="USB_VENDOR=0x0416"
-Environment="USB_PRODUCT=0x5011"
-```
+## Related setup guides
 
-Then:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart ticket-printer
-```
-
-## Troubleshooting
-
-### Permission Errors
-
-```bash
-# Add user to printer groups
-sudo usermod -a -G lp,dialout pi
-
-# Fix USB permissions temporarily
-sudo chmod 666 /dev/bus/usb/*/*
-
-# Log out and back in for group changes to take effect
-```
-
-### Printer Not Detected
-
-1. Check USB connection:
-   ```bash
-   sudo lsusb
-   ```
-
-2. Check permissions:
-   ```bash
-   ls -l /dev/ttyUSB0  # or relevant device
-   sudo chmod 666 /dev/ttyUSB0
-   ```
-
-3. Try different USB ports
-
-4. Verify USB vendor/product IDs match configuration
-
-### Service Won't Start
-
-```bash
-# Check service status
-sudo systemctl status ticket-printer
-
-# View detailed logs
-sudo journalctl -u ticket-printer -n 50
-
-# Try running manually to see errors
-cd ~/ticket-printer-app
-python3 app.py
-```
-
-### Can't Access Web Interface
-
-1. Check if app is running:
-   ```bash
-   ps aux | grep app.py
-   ```
-
-2. Check if port 5000 is in use:
-   ```bash
-   sudo netstat -tulpn | grep 5000
-   ```
-
-3. Check firewall:
-   ```bash
-   sudo ufw allow 5000/tcp
-   ```
-
-4. Verify IP address:
-   ```bash
-   hostname -I
-   ```
-
-### Bluetooth Issues
-
-```bash
-# Check if device is paired
-bluetoothctl devices
-
-# Check rfcomm binding
-rfcomm
-
-# Rebind if needed
-sudo rfcomm bind /dev/rfcomm0 MAC_ADDRESS
-```
-
-## Health Check
-
-Test if the service is working:
-
-```bash
-# From the Raspberry Pi or network:
-curl http://localhost:5000/health
-```
-
-Should return:
-```json
-{
-  "status": "healthy",
-  "printer_connected": true
-}
-```
-
-## Updating the Application
-
-```bash
-# Stop the service
-sudo systemctl stop ticket-printer
-
-# Pull latest changes (if using git)
-git pull
-
-# Or update files manually
-# Copy new files to ~/ticket-printer-app/
-
-# Install new dependencies (if any)
-pip3 install -r requirements.txt
-
-# Restart service
-sudo systemctl start ticket-printer
-```
-
-## Security Considerations
-
-1. Change default Flask debug mode for production
-2. Consider adding authentication if exposed to internet
-3. Use HTTPS for production deployments
-4. Set up firewall rules appropriately
-
-## Success Checklist
-
-- [ ] Files transferred to Raspberry Pi
-- [ ] Dependencies installed
-- [ ] Printer connected and detected
-- [ ] Configuration updated with correct printer IDs
-- [ ] Test print successful
-- [ ] Application running (manually or as service)
-- [ ] Web interface accessible from network
-- [ ] Can submit and print tickets successfully
-
-## Need Help?
-
-Check the main README.md for more detailed information and troubleshooting tips.
-
-
+- [Remote access](REMOTE_ACCESS.md): password, tunnel, service setup, and connection troubleshooting.
+- [Microphone setup](MICROPHONE_SETUP.md): hardware and local speech/sound models.
+- [Bluetooth configuration](CONFIGURE_BLUETOOTH_PRINTER.md): printer connection settings.
+- [Legacy Netlify notes](README_NETLIFY.md): the older split frontend/backend layout.

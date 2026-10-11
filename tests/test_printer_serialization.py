@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from PIL import Image
 
 import app as printer_app
+from microphone import Microphone
 
 
 class PrinterTests(unittest.TestCase):
@@ -36,6 +37,49 @@ class PrinterTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             get_printer.assert_not_called()
             transport.assert_not_called()
+
+    def test_listening_sessions_print_one_header_and_contiguous_increments(self):
+        for transport_type in ('ble', 'usb'):
+            for include_date in (None, True, False):
+                with self.subTest(transport=transport_type, include_date=include_date):
+                    printer = Mock()
+                    mic = Microphone(enabled=True, print_text=printer_app.print_text_content)
+                    with patch.object(mic, '_record'), \
+                            patch.object(printer_app, 'TEST_MODE', False), \
+                            patch.object(printer_app, 'PRINTER_TYPE', transport_type), \
+                            patch.object(printer_app, 'BLE_PRINTER_ADDR', 'printer'), \
+                            patch.object(printer_app, 'format_date_string', return_value='TIMESTAMP'), \
+                            patch.object(printer_app, 'get_printer', return_value=printer), \
+                            patch('ble_printer._print_in_process') as transport:
+                        for _ in range(2):
+                            session = mic.start_live(include_date=include_date)
+                            mic._thread.join(1)
+                            queue = mic._sessions[session['id']]['live']
+                            try:
+                                self.assertFalse(queue.enqueue('  '))
+                                queue.enqueue('First words')
+                                queue.enqueue('More words')
+                            finally:
+                                queue.finish()
+                                queue.wait()
+                            self.assertEqual(queue.snapshot()['printed_count'], 2)
+
+                        header = '-' * 32 + '\n'
+                        if include_date is not False:
+                            header += 'TIMESTAMP\n\n'
+                        expected = [header + 'First words\n', 'More words\n'] * 2
+                        if transport_type == 'ble':
+                            self.assertEqual([call.args[1] for call in transport.call_args_list],
+                                             [b'\x1b@' + text.encode() for text in expected])
+                            # Standalone prints still feed and cut normally.
+                            printer_app.print_text_content('Standalone')
+                            self.assertTrue(transport.call_args.args[1].endswith(b'\n\n\n\x1dV\x00'))
+                        else:
+                            self.assertEqual([call.args[0] for call in printer.text.call_args_list], expected)
+                            printer.cut.assert_not_called()
+                            self.assertEqual(printer.close.call_count, 4)
+                            printer_app.print_text_content('Standalone')
+                            printer.cut.assert_called_once()
 
     def test_non_ble_device_is_closed_even_when_print_fails(self):
         printer = Mock()

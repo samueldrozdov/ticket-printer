@@ -112,6 +112,8 @@ class LiveRecordingTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.print_text = Mock()
+        self.first_print_options = dict(include_date=True, include_separator=True, continuous=True)
+        self.next_print_options = dict(include_date=False, include_separator=False, continuous=True)
         self.mic = Microphone(enabled=True, model_path=self.directory.name, print_text=self.print_text)
         self.opened = threading.Event()
         self.closed = threading.Event()
@@ -208,7 +210,9 @@ class LiveRecordingTests(unittest.TestCase):
         wait_until(lambda: self.mic.live_status()['printed_count'] == 2)
         self.mic.stop(self.session['id'], flush=True)
         self.assertEqual(self.result()['state'], 'done')
-        self.assertEqual(self.print_text.call_args_list, [call('first phrase second phrase'), call('third phrase')])
+        self.assertEqual(self.print_text.call_args_list, [
+            call('first phrase second phrase', **self.first_print_options),
+            call('third phrase', **self.next_print_options)])
 
     def test_manual_stop_preserves_unprinted_final_text_by_default(self):
         self.start(cadence_seconds=10)
@@ -228,7 +232,7 @@ class LiveRecordingTests(unittest.TestCase):
         wait_until(lambda: bool(self.mic.live_status()['text']))
         self.mic.stop(self.session['id'], flush=True)
         self.assertEqual(self.result()['printed_count'], 1)
-        self.print_text.assert_called_once_with('print the remainder')
+        self.print_text.assert_called_once_with('print the remainder', **self.first_print_options)
 
     def test_duration_stops_and_flushes_without_any_polling(self):
         self.start(cadence_seconds=10, duration_seconds=1)
@@ -238,7 +242,7 @@ class LiveRecordingTests(unittest.TestCase):
         self.assertEqual(result['state'], 'done')
         self.assertEqual(result['seconds'], 1)
         self.assertTrue(self.closed.is_set())
-        self.print_text.assert_called_once_with('timed session')
+        self.print_text.assert_called_once_with('timed session', **self.first_print_options)
 
     def test_indefinite_mode_has_no_review_deadline(self):
         with patch('microphone.threading.Timer') as timer:
@@ -264,7 +268,7 @@ class LiveRecordingTests(unittest.TestCase):
         self.mic.stop(self.session['id'])
         result = self.result()
         self.assertEqual(result['state'], 'done')
-        self.print_text.assert_called_once_with('[dog barking]')
+        self.print_text.assert_called_once_with('[dog barking]', **self.first_print_options)
 
     def test_input_overflow_continues_live_printing_without_replaying_a_ticket(self):
         self.start(cadence_seconds=1)
@@ -278,7 +282,9 @@ class LiveRecordingTests(unittest.TestCase):
         self.assertIn('Some audio was missed', status['warning'])
         self.mic.stop(self.session['id'])
         self.assertEqual(self.result()['state'], 'done')
-        self.assertEqual(self.print_text.call_args_list, [call('first ticket'), call('second ticket')])
+        self.assertEqual(self.print_text.call_args_list, [
+            call('first ticket', **self.first_print_options),
+            call('second ticket', **self.next_print_options)])
 
     def test_printer_failure_stops_audio_and_reports_failed_text(self):
         self.print_text.side_effect = RuntimeError('No paper')
@@ -296,7 +302,7 @@ class LiveRecordingTests(unittest.TestCase):
         release = threading.Event()
         printing = threading.Event()
 
-        def slow_print(text):
+        def slow_print(text, **options):
             printing.set()
             if not release.wait(2):
                 raise RuntimeError('Test printer timed out')
@@ -325,13 +331,13 @@ class LiveRecordingTests(unittest.TestCase):
         result = self.result()
         self.assertEqual(result['state'], 'done')
         self.assertEqual(result['text'], 'buffered')
-        self.print_text.assert_called_once_with('in flight')
+        self.print_text.assert_called_once_with('in flight', **self.first_print_options)
 
     def test_full_print_queue_stops_capture_and_preserves_overflow_text(self):
         release = threading.Event()
         printing = threading.Event()
 
-        def slow_print(text):
+        def slow_print(text, **options):
             printing.set()
             if not release.wait(2):
                 raise RuntimeError('Test printer timed out')
@@ -353,7 +359,7 @@ class LiveRecordingTests(unittest.TestCase):
         self.assertIn('queue is full', result['error'])
         self.assertEqual(result['text'], 'overflow text')
         self.assertEqual(result['cancelled_count'], 1)
-        self.print_text.assert_called_once_with('in flight')
+        self.print_text.assert_called_once_with('in flight', **self.first_print_options)
 
     def test_missing_microphone_closes_queue_and_allows_restart(self):
         self.sd.query_devices.side_effect = ValueError('Disconnected')
@@ -394,7 +400,7 @@ class LiveRecordingTests(unittest.TestCase):
         stop = self.client.post('/microphone/live/' + status['id'] + '/stop', json={'flush': True})
         self.assertEqual(stop.status_code, 202)
         self.assertEqual(self.result()['state'], 'done')
-        self.print_text.assert_called_once_with('through the API')
+        self.print_text.assert_called_once_with('through the API', **self.first_print_options)
         self.assertEqual(self.client.get('/microphone/live').json['state'], 'done')
 
     def test_legacy_stop_also_safely_stops_live_mode(self):
@@ -415,7 +421,8 @@ class LiveRecordingTests(unittest.TestCase):
         wait_until(lambda: bool(self.mic.live_status()['text']))
         self.mic.stop(self.session['id'], flush=True)
         self.assertEqual(self.result()['printed_count'], 1)
-        self.print_text.assert_called_once_with('no timestamp', include_date=False)
+        self.print_text.assert_called_once_with('no timestamp', include_date=False,
+                                                include_separator=True, continuous=True)
 
     def test_invalid_start_options_never_open_microphone(self):
         cases = [[], {'unknown': 1}, {'cadence_seconds': None}]

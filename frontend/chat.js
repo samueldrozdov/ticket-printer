@@ -29,6 +29,7 @@
     const liveStorageKey = `samson-live-session:${apiUrl}`;
     let rememberedLiveId = null;
     try { rememberedLiveId = sessionStorage.getItem(liveStorageKey); } catch { /* Storage may be disabled. */ }
+    liveUI.trackingSession = Boolean(rememberedLiveId);
     const listener = new window.LiveListening({
         api, onChange: updateLiveControls, onStatus: showLiveSession, onFinish: finishLiveSession,
         rememberedId: rememberedLiveId,
@@ -46,9 +47,13 @@
     let contentLoading = null;
     let checkingConnection = false;
     let lastVocabWord = null;
+    let lastQuote = null;
     let lastMemeUrl = null;
 
-    const timeString = () => new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const timeString = (date = new Date()) => {
+        const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${time} on ${date.toLocaleDateString('en-US')}`;
+    };
     byId('dayLabel').textContent = `Today · ${timeString()}`;
     const announce = text => { byId('liveStatus').textContent = text; };
     const scrollToLatest = () => { messages.scrollTop = messages.scrollHeight; };
@@ -114,11 +119,18 @@
     }
 
     function updateComposer() {
-        const locked = Boolean(mic.busy || contentLoading);
+        const listening = Boolean(liveUI.trackingSession);
+        const locked = Boolean(listening || mic.busy || contentLoading);
+        form.hidden = listening;
+        if (listening) {
+            closeMenu();
+            field.classList.remove('dragging');
+        }
         sendButton.hidden = mic.busy || (!input.value.trim() && !selectedImage);
         sendButton.disabled = locked || imageLoading;
         plusButton.disabled = locked || imageLoading;
         removeImageButton.disabled = locked || imageLoading;
+        imageInput.disabled = locked || imageLoading;
         input.readOnly = locked;
         input.hidden = mic.busy;
         input.placeholder = contentLoading === 'meme' ? 'Finding a meme…'
@@ -207,7 +219,7 @@
 
     function sendMessage(event) {
         event.preventDefault();
-        if (mic.busy || imageLoading || contentLoading) return;
+        if (liveUI.trackingSession || mic.busy || imageLoading || contentLoading) return;
         const text = input.value.trim();
         const image = selectedImage;
         if (!text && !image) return;
@@ -287,7 +299,7 @@
     }
 
     async function attachImage(file) {
-        if (!file || mic.busy || contentLoading) return;
+        if (!file || liveUI.trackingSession || mic.busy || contentLoading) return;
         const version = ++imageVersion;
         imageLoading = true;
         updateComposer();
@@ -347,6 +359,9 @@
         const session = state.session;
         const visible = state.busy && state.trackingSession;
         const bar = byId('listeningBar');
+        const focusStop = visible && bar.hidden &&
+            [form, menu, listenSettings].some(node => node.contains(document.activeElement));
+        const focusComposer = !visible && !bar.hidden && document.activeElement === byId('stopListening');
         bar.hidden = !visible;
         bar.dataset.offline = String(state.offline);
         listeningMeter.update(visible ? session : null, { offline: state.offline, stopping: state.stopRequested });
@@ -373,6 +388,8 @@
         byId('stopListening').disabled = state.stopRequested || !state.busy;
         byId('stopListening').querySelector('span').textContent = state.stopRequested ? 'Stopping…' : 'Stop';
         updateComposer();
+        if (focusStop) byId('stopListening').focus();
+        else if (focusComposer) input.focus();
         if (!listenSettings.hidden) showListenSettingsError(state.error);
     }
 
@@ -402,9 +419,13 @@
                 liveUI.jobs.set(job.id, node);
             }
             const meta = node.querySelector('.message-meta');
-            const label = { queued: 'Waiting to print…', printing: 'Printing…',
+            let label = { queued: 'Waiting to print…', printing: 'Printing…',
                 printed: data.test_mode ? 'Logged in test mode · no paper printed' : 'Printed from listening',
                 cancelled: 'Cancelled · not printed', failed: 'Print not confirmed · check the printer' }[job.state];
+            if (job.state === 'printed') {
+                meta.dataset.printedAt = job.printed_at || meta.dataset.printedAt || new Date().toISOString();
+                label += ` · ${timeString(new Date(meta.dataset.printedAt))}`;
+            }
             if (meta.textContent !== label) meta.textContent = label;
             meta.classList.toggle('failed', job.state === 'failed');
             if (!node.parentNode) liveUI.history.append(node);
@@ -430,7 +451,6 @@
 
     function finishLiveSession(data) {
         liveUI.transcript?.remove();
-        if (document.activeElement === byId('stopListening')) plusButton.focus();
         if (data.text?.trim()) liveUI.pendingDrafts.push(data.text.trim());
         restoreLiveDrafts();
         if (data.error) showError(`${data.error}${data.text ? ' Unprinted words are kept in your draft.' : ''}`);
@@ -645,7 +665,7 @@
     }
 
     async function addVocabulary() {
-        if (mic.busy || imageLoading || contentLoading) return;
+        if (liveUI.trackingSession || mic.busy || imageLoading || contentLoading) return;
         closeMenu();
         contentLoading = 'word';
         updateComposer();
@@ -682,8 +702,52 @@
         }
     }
 
+    // Public-domain excerpts, bundled so adding a quote never needs a network request.
+    const quotes = [
+        // Emerson, Essays: https://www.gutenberg.org/files/16643/16643-h/16643-h.htm
+        ['Nothing great was ever achieved without enthusiasm.', 'Ralph Waldo Emerson'],
+        ['The only way to have a friend is to be one.', 'Ralph Waldo Emerson'],
+        ['Trust thyself: every heart vibrates to that iron string.', 'Ralph Waldo Emerson'],
+        ['Nothing can bring you peace but yourself.', 'Ralph Waldo Emerson'],
+        // Thoreau, Walden: https://www.gutenberg.org/files/205/205-h/205-h.htm
+        ['If a man does not keep pace with his companions, perhaps it is because he hears a different drummer.', 'Henry David Thoreau'],
+        ['Only that day dawns to which we are awake.', 'Henry David Thoreau'],
+        ['Rather than love, than money, than fame, give me truth.', 'Henry David Thoreau'],
+        ['Things do not change; we change.', 'Henry David Thoreau'],
+        // Austen, Pride and Prejudice: https://www.gutenberg.org/files/1342/1342-h/1342-h.htm
+        ['My courage always rises with every attempt to intimidate me.', 'Jane Austen'],
+        ['Think only of the past as its remembrance gives you pleasure.', 'Jane Austen'],
+        ['I dearly love a laugh.', 'Jane Austen'],
+        ['I declare, after all, there is no enjoyment like reading!', 'Jane Austen'],
+        // Carroll, Alice’s Adventures in Wonderland: https://www.gutenberg.org/files/11/11-h/11-h.htm
+        ['Who in the world am I? Ah, that’s the great puzzle!', 'Lewis Carroll'],
+        ['It’s no use going back to yesterday, because I was a different person then.', 'Lewis Carroll'],
+        ['Begin at the beginning, and go on till you come to the end: then stop.', 'Lewis Carroll'],
+        ['Everything’s got a moral, if only you can find it.', 'Lewis Carroll']
+    ];
+
+    function addQuote() {
+        if (liveUI.trackingSession || mic.busy || imageLoading || contentLoading) return;
+        closeMenu();
+        const choices = quotes.filter(quote => quote !== lastQuote);
+        const quote = choices[Math.floor(Math.random() * choices.length)];
+        const [text, author] = quote;
+        const draft = [input.value.trim(), `“${text}”\n— ${author}`].filter(Boolean).join('\n\n');
+        if (draft.length > input.maxLength) {
+            const message = 'There isn’t enough room for a quote. Shorten your draft and try again.';
+            showError(message);
+            announce(message);
+        } else {
+            input.value = draft;
+            lastQuote = quote;
+            announce('Random quote added to your draft. Review it before sending.');
+        }
+        updateComposer();
+        input.focus();
+    }
+
     async function addMeme() {
-        if (mic.busy || imageLoading || contentLoading) return;
+        if (liveUI.trackingSession || mic.busy || imageLoading || contentLoading) return;
         closeMenu();
         contentLoading = 'meme';
         updateComposer();
@@ -702,7 +766,7 @@
             announce('Random meme attached. Review it before sending.');
         } catch (error) {
             console.warn('Could not load a random meme:', error);
-            const message = 'Couldn’t load a random meme. Your draft is kept. Try again.';
+            const message = 'Couldn’t load a random meme. Try again.';
             showError(message);
             announce(message);
         } finally {
@@ -721,6 +785,7 @@
         }
     });
     plusButton.addEventListener('click', () => {
+        if (plusButton.disabled) return;
         const wasOpen = !menu.hidden || !listenSettings.hidden;
         closeMenu();
         menu.hidden = wasOpen;
@@ -735,6 +800,7 @@
         if (!menu.hidden || !listenSettings.hidden) { closeMenu(); plusButton.focus(); }
     });
     byId('listenButton').addEventListener('click', () => {
+        if (liveUI.trackingSession) return;
         menu.hidden = true;
         listenSettings.hidden = false;
         plusButton.setAttribute('aria-expanded', 'true');
@@ -754,14 +820,23 @@
     });
     listenSettings.addEventListener('submit', startListening);
     byId('stopListening').addEventListener('click', () => listener.stop());
-    byId('photoButton').addEventListener('click', () => { closeMenu(); imageInput.click(); });
+    byId('photoButton').addEventListener('click', () => {
+        if (imageInput.disabled) return;
+        closeMenu();
+        imageInput.click();
+    });
     byId('vocabButton').addEventListener('click', addVocabulary);
+    byId('quoteButton').addEventListener('click', addQuote);
     byId('memeButton').addEventListener('click', addMeme);
     imageInput.addEventListener('change', () => attachImage(imageInput.files[0]));
-    removeImageButton.addEventListener('click', () => { clearImage(); input.focus(); });
+    removeImageButton.addEventListener('click', () => {
+        if (removeImageButton.disabled) return;
+        clearImage();
+        input.focus();
+    });
     field.addEventListener('dragover', event => {
         event.preventDefault();
-        if (!mic.busy && !contentLoading) field.classList.add('dragging');
+        if (!liveUI.trackingSession && !mic.busy && !contentLoading) field.classList.add('dragging');
     });
     field.addEventListener('dragleave', event => {
         if (!field.contains(event.relatedTarget)) field.classList.remove('dragging');
