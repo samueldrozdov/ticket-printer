@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Print photos and memes at the full paper width, preserving their proportions
   and matching text spacing above the image in prints and ticket previews.
 - Skip animated memes so Random Meme only attaches still images.
-- Format message and ticket timestamps as `9:14 PM on 10/10/2026`, without seconds.
+- Show only the time in chat message timestamps and restore the `Today · 9:14 PM`
+  chat separator. Printed tickets use `9:14 PM on 10/10/2026`, without seconds.
 - Pad incomplete sound-classification windows when recording stops so very short
   audio tails cannot interrupt finalization or discard recognized speech.
 - Feed trailing blank paper with compact ESC/POS commands instead of slow raster

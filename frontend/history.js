@@ -45,7 +45,7 @@
             incoming.append(paper);
             article.append(incoming);
         }
-        const meta = element('time', 'message-meta', `${status} · ${timestamp}`);
+        const meta = element('time', 'message-meta', `${status} · ${time}`);
         meta.dateTime = entry.created_at;
         meta.title = timestamp;
         if (['failed', 'unconfirmed'].includes(entry.status)) meta.classList.add('failed');

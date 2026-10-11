@@ -1,8 +1,7 @@
 # Deploy Samson to the Raspberry Pi
 
-This is the deployment runbook for the current Samson installation. The Pi serves
-both the website and API. **Pushing to GitHub does not update the Pi**: publish a
-tested commit, install that commit on the Pi, restart the app, then reload the page.
+The Pi serves the website and API. Deploy in four steps: **publish → back up →
+install → restart and verify**. Pushing to GitHub alone does not update the Pi.
 
 ## Current installation
 
@@ -19,10 +18,9 @@ tested commit, install that commit on the Pi, restart the app, then reload the p
 | Settings / history / models | `.env`, `data/print-history.sqlite3`, `models/` |
 | Backups | `/home/sd/ticket-printer-backups/` |
 
-Use Raspberry Pi Connect → **Remote shell**, or an existing SSH connection.
-The current tunnel is a Cloudflare Quick Tunnel. Restart only the app during an
-ordinary deployment; restarting the tunnel or rebooting the Pi changes its URL.
-There is no frontend build step and no Netlify deployment in this setup.
+Use [Raspberry Pi Connect](#access-the-pi-in-the-browser) or an existing SSH
+connection. Keep the tunnel running: restarting it or rebooting the Pi changes
+the public URL. There is no frontend build or Netlify deployment.
 
 ## 1. Publish a tested commit from the development computer
 
@@ -35,17 +33,13 @@ git diff
 git diff --cached
 ```
 
-This workflow publishes `main`; finish merging any working branch before testing
-and publishing. If other tasks are editing this checkout, wait for those changes
-to be ready or test an isolated checkout of the intended release.
-Stage explicit files with `git add <file>` or review hunks with `git add -p`;
-do not sweep unrelated work into a deployment with `git add .`. Uncommitted files
-on the development computer never reach the Pi through Git.
+Finish merging onto `main`. If other tasks are editing the checkout, wait for
+their changes or test an isolated checkout. Stage only the intended release with
+`git add <file>` or `git add -p`; uncommitted changes do not reach the Pi.
 
-Run the checks below in your activated development Python environment. Install
-the applicable dependencies first; `requirements-remote.txt` includes the base
-requirements, and `requirements-listening.txt` includes microphone support and
-NumPy for the audio pipeline tests. JavaScript tests require Node.js.
+In the development Python environment, install dependencies from
+`requirements-remote.txt` and `requirements-listening.txt` as needed. Run both
+suites (JavaScript tests require Node.js):
 
 ```bash
 samson_test_dir=$(mktemp -d)
@@ -55,10 +49,8 @@ SAMSON_PASSWORD='' SAMSON_REMOTE_ACCESS=false \
 node --test tests/*.test.cjs
 ```
 
-Both commands must pass. The authentication overrides apply only to the test
-process; never copy them into the Pi's `.env`. The temporary history path keeps
-test records out of real print history. Tests mock printer operations; they do
-not replace a physical check when printer behavior changes.
+Both suites must pass. The temporary history and authentication overrides apply
+only to tests; keep the Pi's `.env` unchanged. Printer operations are mocked.
 
 For documentation-only changes, check links, referenced paths, and command syntax.
 After updating the Pi checkout, skip the application suites and app restart.
@@ -72,14 +64,12 @@ git push origin main
 git rev-parse HEAD
 ```
 
-The commit must contain the same code you tested. Keep that ID for the Pi step
-and the deployment report; avoid chasing a moving branch while other work lands.
+Use this exact tested commit for the remaining steps.
 
 ## 2. Prepare the Pi
 
-Stop recording or Passive Listening in the website and wait for all queued
-messages and physical printing to finish. Preserve any draft before reloading.
-Keep other clients from sending messages during the short deployment window.
+Stop recording or Passive Listening, wait for queued printing to finish, and
+keep other clients idle during deployment.
 
 On the Pi, check the checkout and services:
 
@@ -90,11 +80,9 @@ git rev-parse HEAD
 sudo systemctl status ticket-printer samson-tunnel --no-pager
 ```
 
-If the checkout has local changes, reconcile them before continuing. Do not use
-`git reset --hard`, `git clean`, or overwrite `.env` to force a deployment.
-Preserve the existing password, printer/microphone settings, history, and models.
-Do not run `setup.sh`, `deploy.sh`, or install `backend/ticket-printer.service` on
-this installation: those are older setup paths with different service settings.
+Reconcile local changes before continuing; do not force a clean checkout with
+`git reset --hard` or `git clean`. Preserve `.env`, history, and models. Avoid the
+legacy `setup.sh`, `deploy.sh`, and `backend/ticket-printer.service`.
 
 Make a backup and record the previous revision in this same shell:
 
@@ -122,8 +110,7 @@ PYTHON
 printf 'Backup: %s\n' "$samson_backup_dir"
 ```
 
-SQLite's backup API handles an open database correctly. Keep this directory
-private because it contains the password. Models are not changed by a Git update.
+Record the backup path for rollback. It contains the password; keep it private.
 
 ## 3. Install the exact release
 
@@ -151,10 +138,8 @@ If requirements changed, install them using the Pi's existing environment:
 .venv/bin/python -m pip install -r requirements-remote.txt -r requirements-listening.txt
 ```
 
-Only run `.venv/bin/python install_listening_models.py` when installing or changing
-the local listening models. Routine code/UI updates do not need new model
-downloads. See [microphone setup](MICROPHONE_SETUP.md#upgrade-to-local-speech-and-sound-recognition)
-for model configuration; audio recognition stays on the Pi.
+Model changes use [microphone setup](MICROPHONE_SETUP.md#upgrade-to-local-speech-and-sound-recognition);
+routine releases do not need model downloads.
 
 Run the Python suite on the Pi with isolated history:
 
@@ -181,24 +166,56 @@ git rev-parse HEAD
 samson-link
 ```
 
-Both services should report `active`, and the commit must match the release ID.
-The existing HTTPS address should still work. Do not launch a second `app.py`,
-`serve_remote.py --tunnel`, or `backend/api.py` process alongside the service.
+Both services must be `active`, and the commit must match the release ID.
+Restarting loads the new Python code and HTML templates. Use the existing app
+service; do not launch a second server.
 
-In the browser:
+Verify the public UI files with the command below, then check the browser.
 
-1. Preserve any draft, reload the page, and sign in if needed. An already-open tab
-   keeps its loaded JavaScript until reloaded, even though responses use `no-store`.
-2. Open Settings → **Check again**. The app should be reachable and the printer
-   available. Authenticated `/health` reports `service: samson`, `status: healthy`,
-   and `printer_state`; `healthy` alone does not confirm printer readiness.
+### Check public files from the Pi checkout
+
+This uses the existing password without printing it:
+
+```bash
+.venv/bin/python - <<'PYTHON'
+from pathlib import Path
+import subprocess
+import requests
+from dotenv import dotenv_values
+
+config = dotenv_values('.env')
+session = requests.Session()
+session.auth = ('samson', config.get('SAMSON_PASSWORD', ''))
+url = subprocess.check_output(['samson-link'], text=True).strip().rstrip('/')
+frontend = Path('frontend')
+for asset in sorted(frontend.glob('*.js')) + sorted(frontend.glob('*.css')):
+    response = session.get(f'{url}/{asset.name}', timeout=20, allow_redirects=False)
+    assert response.status_code == 200, f'{asset.name}: HTTP {response.status_code}'
+    assert response.content == asset.read_bytes(), f'{asset.name}: public file differs'
+    print('Public asset verified:', asset.name)
+print('Verified checkout:', subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip())
+PYTHON
+```
+
+Every file must match. For failures, check the URL, authentication, and service
+checkout.
+
+### Check the browser
+
+1. Reload Samson or open a separate tab to preserve an unsent message or photo.
+   Open tabs keep their old JavaScript until reloaded, even with `no-store`.
+2. Open Settings → **Connection** → **Check again**. The app should be reachable
+   and the printer available. Authenticated `/health` reports `service: samson`,
+   `status: healthy`, and `printer_state`; `healthy` alone does not confirm printer
+   readiness.
 3. Check the feature changed by this release and confirm existing history appears.
 4. If printing changed, send one clearly labeled test and check the paper. Do not
    automatically resend an unconfirmed ticket. If listening changed, record and
    stop a short sample in review mode before testing automatic printing.
 
-Report the deployed commit, checks performed, and any hardware checks still
-unverified. A successful push alone is not a completed deployment.
+Report the commit, completed checks, and unverified hardware behavior. Call it
+deployed only after the restart, public-file check, and browser checks succeed;
+before then, report it as pushed or installed.
 
 ## Roll back a failed release
 
@@ -211,12 +228,47 @@ git switch --detach "$(cat "$samson_backup_dir/commit.txt")"
 sudo systemctl restart ticket-printer.service
 ```
 
-Repeat the service and browser checks above. This restores code and frontend
-together without replacing `.env`, history, or models. Dependency or database
-format changes need their own compatible rollback; do not erase newer history
-by blindly restoring a database backup. Before the next deployment, return to
-`main` with `git switch main` during the idle deployment window, then install the
-new tested release before restarting.
+Repeat verification. This restores code while preserving settings and history;
+dependency or database changes need a compatible rollback. Before the next
+deployment, return to `main` during an idle window, install the tested release,
+and restart.
+
+## Access the Pi in the browser
+
+Use the browser already signed in to [Raspberry Pi Connect](https://connect.raspberrypi.com/devices).
+Choose **sd-pi → Connect via → Remote shell**. This also works when SSH cannot
+reach `sd-pi.local`. In each new shell, confirm `whoami` is `sd`, `hostname` is
+`sd-pi`, and change to `/home/sd/ticket-printer-os`.
+
+- Before pasting, verify the window is **sd-pi remote shell – Raspberry Pi Connect**
+  and focus **Terminal input**. If the active window changes, re-read the current
+  state and reselect the shell; Samson's message field must not receive commands.
+- Wait for the result and shell prompt before continuing. If output is delayed,
+  take a fresh screenshot instead of repeating a command. An echo or truncated
+  log does not establish success; check the final result and exit status.
+- Keep the shell open until work finishes. After reconnecting, check the process,
+  logs, and Git revision before retrying, and recreate needed shell variables.
+
+### If browser automation loses multiline input
+
+Use a paste operation that preserves line breaks. If that is unreliable, save a
+reviewed Bash script locally as `/tmp/samson-deploy.sh`, starting with
+`set -euo pipefail` and `cd /home/sd/ticket-printer-os`. Encode it locally:
+
+```bash
+python3 -c 'import base64, pathlib; print(base64.b64encode(pathlib.Path("/tmp/samson-deploy.sh").read_bytes()).decode("ascii"))'
+```
+
+Replace the placeholder below with that output and send it as one line to the
+Pi. It decodes, checks Bash syntax, runs the script, and reports its exit status:
+
+```bash
+samson_script=$(mktemp /tmp/samson-deploy-XXXXXX) && printf '%s' 'BASE64_OF_REVIEWED_SCRIPT' | base64 --decode > "$samson_script" && bash -n "$samson_script" && bash "$samson_script"; samson_exit=$?; printf 'Script exit status: %s\n' "$samson_exit"
+```
+
+Keep passwords in the Pi's `.env`; base64 does not conceal them. Script variables
+and directory changes do not carry back to the parent shell, so record the backup
+path and previous revision from its output.
 
 ## If the website looks out of date
 

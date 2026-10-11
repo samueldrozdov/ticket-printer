@@ -50,10 +50,8 @@
     let lastQuote = null;
     let lastMemeUrl = null;
 
-    const timeString = (date = new Date()) => {
-        const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        return `${time} on ${date.toLocaleDateString('en-US')}`;
-    };
+    const timeString = (date = new Date()) =>
+        date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     byId('dayLabel').textContent = `Today · ${timeString()}`;
     const announce = text => { byId('liveStatus').textContent = text; };
     const scrollToLatest = () => { messages.scrollTop = messages.scrollHeight; };

@@ -54,7 +54,8 @@ restarting the app without changing the public link, and checking the result.
 Sending a chat message clears the composer immediately, so you can send the next
 message while Samson prints. Each sent message, photo, meme, or vocab word appears
 on your side of the conversation, followed directly by Samson’s ticket preview.
-Message and ticket timestamps use the format `9:14 PM on 10/10/2026`.
+Chat message timestamps show only the time, such as `9:14 PM`, and the chat
+separator uses `Today · 9:14 PM`. Printed tickets use `9:14 PM on 10/10/2026`.
 Messages print in the order sent; keep the page open until queued messages finish.
 Unconfirmed messages stay visible with their error directly underneath.
 

@@ -50,11 +50,11 @@ test('opening the site restores saved content, status and ticket previews withou
     assert.equal(sent[0].children[0].innerHTML, undefined);
     const timestamp = entry(1).created_at;
     const date = new Date(timestamp);
-    const time = `${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} on ${date.toLocaleDateString('en-US')}`;
+    const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     assert.equal(sent[0].children.length, 2);
     assert.equal(sent[0].children.at(-1).textContent, `Printed · ${time}`);
     assert.equal(sent[0].children.at(-1).dateTime, timestamp);
-    assert.equal(sent[0].children.at(-1).title, time);
+    assert.equal(sent[0].children.at(-1).title, `${time} on ${date.toLocaleDateString('en-US')}`);
     assert.equal(sent[1].children.at(-1).textContent, `Test preview · no paper printed · ${time}`);
     const received = rows[1].children[1];
     assert.equal(received.className, 'message incoming');

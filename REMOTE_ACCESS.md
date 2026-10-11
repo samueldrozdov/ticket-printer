@@ -3,6 +3,9 @@
 **Updating the installed Pi?** Use [DEPLOYMENT.md](DEPLOYMENT.md). The setup
 commands below are for establishing remote access; ordinary releases keep the
 existing tunnel running and restart only the app.
+For browser-based maintenance, see
+[Access the Pi in the browser](DEPLOYMENT.md#access-the-pi-in-the-browser), including
+terminal input, reconnecting, and preserving the website's draft.
 
 Run the complete website and API on the Raspberry Pi and expose it through an
 HTTPS tunnel. Your phone can then use cellular or another Wi-Fi network. The Pi
